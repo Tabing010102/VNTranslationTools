@@ -7,7 +7,8 @@ namespace VNTextPatch.Shared.Util
 {
     public class SjisTunnelEncoding : Encoding
     {
-        private static readonly Encoding SjisEncoding = GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+        //private static readonly Encoding SjisEncoding = GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+        private static readonly Encoding SjisEncoding = GetEncoding(936, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
 
         private readonly byte[] _byteArray = new byte[2];
         private readonly Dictionary<char, char> _mappings = new Dictionary<char, char>();
@@ -100,18 +101,20 @@ namespace VNTextPatch.Shared.Util
 
                 if ((highByte >= 0x81 && highByte < 0xA0) || (highByte >= 0xE0 && highByte < 0xFD))
                 {
-                    byte lowByte = bytes[i++];
-                    if (lowByte < 0x40)
-                    {
-                        char tunnelChar = (char)((highByte << 8) | lowByte);
-                        char origChar = _mappings.First(m => m.Value == tunnelChar).Key;
-                        result.Append(origChar);
-                    }
-                    else
-                    {
-                        StringUtil.SjisEncoding.GetChars(bytes, i - 2, 2, decodedChars, 0);
-                        result.Append(decodedChars[0]);
-                    }
+                    //byte lowByte = bytes[i++];
+                    //if (lowByte < 0x40)
+                    //{
+                    //    char tunnelChar = (char)((highByte << 8) | lowByte);
+                    //    char origChar = _mappings.First(m => m.Value == tunnelChar).Key;
+                    //    result.Append(origChar);
+                    //}
+                    //else
+                    //{
+                    //    StringUtil.SjisEncoding.GetChars(bytes, i - 2, 2, decodedChars, 0);
+                    //    result.Append(decodedChars[0]);
+                    //}
+                    StringUtil.SjisEncoding.GetChars(bytes, i - 2, 2, decodedChars, 0);
+                    result.Append(decodedChars[0]);
                 }
                 else
                 {
@@ -129,6 +132,7 @@ namespace VNTextPatch.Shared.Util
             try
             {
                 numBytes = SjisEncoding.GetBytes(str, charIdx, numChars, bytes, byteIdx);
+                return true;
                 if (bytes[byteIdx] >= 0xF0)
                 {
                     numBytes = 0;
@@ -139,6 +143,7 @@ namespace VNTextPatch.Shared.Util
             }
             catch
             {
+                throw new Exception("TrySjisEncode error");
                 return false;
             }
         }

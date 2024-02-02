@@ -263,6 +263,7 @@ namespace VNTextPatch.Shared.Scripts
 
         private static string ReplaceSpecialCharsByEscapeSequence(string str)
         {
+            return str;
             StringBuilder result = new StringBuilder(str.Length);
             byte[] bytes = new byte[2];
             for (int i = 0; i < str.Length; i++)

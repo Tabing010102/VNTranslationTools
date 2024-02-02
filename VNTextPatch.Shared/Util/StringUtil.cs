@@ -9,7 +9,8 @@ namespace VNTextPatch.Shared.Util
 {
     public static class StringUtil
     {
-        public static readonly Encoding SjisEncoding = Encoding.GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ReplacementFallback);
+        //public static readonly Encoding SjisEncoding = Encoding.GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ReplacementFallback);
+        public static readonly Encoding SjisEncoding = Encoding.GetEncoding(936, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
         public static readonly SjisTunnelEncoding SjisTunnelEncoding = new SjisTunnelEncoding();
 
         private static readonly char[] ControlChars = "\a\b\f\n\r\t\v".ToCharArray();
