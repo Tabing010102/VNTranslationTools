@@ -22,8 +22,8 @@ namespace VNTextPatch.Shared.Scripts
             }
             else
             {
-                _writeEncoding = StringUtil.SjisTunnelEncoding;
-                return StringUtil.SjisEncoding;
+                _writeEncoding = Encoding.GetEncoding(936);
+                return Encoding.GetEncoding(936);
             }
         }
 
