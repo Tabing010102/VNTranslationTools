@@ -236,7 +236,7 @@ namespace VNTextPatch.Shared.Scripts.Kirikiri
                 text = PlainRubyRegex.Replace(text, ConvertPlainRubyToKirikiri);
 
             text = ProportionalWordWrapper.Default.Wrap(text);
-            text = text.Replace("\r\n", "[r]\r\n");
+            //text = text.Replace("\r\n", "[r]\r\n");
             return text;
         }
 
