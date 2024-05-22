@@ -281,6 +281,7 @@ namespace VNTextPatch.Shared.Scripts
                     }
                     catch
                     {
+                        Console.WriteLine($"Invalid character {c}");
                         result.Append($@"\${(int)c};");
                     }
                 }

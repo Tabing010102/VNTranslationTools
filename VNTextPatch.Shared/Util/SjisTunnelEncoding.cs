@@ -185,6 +185,8 @@ namespace VNTextPatch.Shared.Util
 
         private char GetSjisTunnelChar(char origChar)
         {
+            return origChar;
+
             if (char.IsHighSurrogate(origChar) || char.IsLowSurrogate(origChar))
                 throw new NotSupportedException("Surrogate chars not supported");
 
