@@ -673,19 +673,59 @@ namespace VNTextPatch.Shared.Scripts.Ethornell
             string funcName = ReadStringAtAddress(item.Value);
             if (funcName == "_SelectEx")
                 HandleChoiceScreen();
+            else if (funcName == "TZ")
+                HandleSceneTitle();
+        }
+
+        private void HandleSceneTitle()
+        {
+            List<StackItem> args = new List<StackItem>();
+            while (_stringStack.Count > 0)
+                args.Insert(0, _stringStack.Pop());
+
+            foreach (StackItem item in args)
+            {
+                OnStringAddressEncountered(
+                    item.Offset,
+                    item.Value,
+                    IsDisplayText(item.Value) ? ScriptStringType.Message : ScriptStringType.Internal);
+            }
         }
 
         private void HandleMessage()
         {
-            StackItem message = _stringStack.Pop();
+            if (_stringStack.Count == 0)
+                return;
 
-            if (_stringStack.Count > 0)
+            StackItem top = _stringStack.Pop();
+
+            // Diamic Days pushes the speaker name last, so the name is on top of the
+            // message. Older BGI titles push the message last. Detect both.
+            if (IsSpeakerName(top.Value) &&
+                _stringStack.Count > 0 &&
+                IsMessageText(_stringStack.Peek().Value))
             {
-                StackItem name = _stringStack.Pop();
-                OnStringAddressEncountered(name.Offset, name.Value, !IsEmptyString(name.Value) ? ScriptStringType.CharacterName : ScriptStringType.Internal);
+                StackItem message = _stringStack.Pop();
+                OnStringAddressEncountered(top.Offset, top.Value, ScriptStringType.CharacterName);
+                OnStringAddressEncountered(message.Offset, message.Value, ScriptStringType.Message);
+            }
+            else
+            {
+                if (_stringStack.Count > 0 &&
+                    IsSpeakerName(_stringStack.Peek().Value) &&
+                    IsMessageText(top.Value))
+                {
+                    StackItem name = _stringStack.Pop();
+                    OnStringAddressEncountered(name.Offset, name.Value, ScriptStringType.CharacterName);
+                }
+
+                OnStringAddressEncountered(
+                    top.Offset,
+                    top.Value,
+                    !IsEmptyString(top.Value) && !IsResourceId(top.Value) ? ScriptStringType.Message : ScriptStringType.Internal);
             }
 
-            OnStringAddressEncountered(message.Offset, message.Value, !IsEmptyString(message.Value) ? ScriptStringType.Message : ScriptStringType.Internal);
+            OutputInternalStrings();
         }
 
         private void HandleChoiceScreen()
@@ -708,8 +748,72 @@ namespace VNTextPatch.Shared.Scripts.Ethornell
             while (_stringStack.Count > 0)
             {
                 StackItem item = _stringStack.Pop();
-                OnStringAddressEncountered(item.Offset, item.Value, ScriptStringType.Internal);
+                OnStringAddressEncountered(
+                    item.Offset,
+                    item.Value,
+                    IsDisplayText(item.Value) ? ScriptStringType.Message : ScriptStringType.Internal);
             }
+        }
+
+        private bool IsResourceId(int addr)
+        {
+            string text = ReadStringAtAddress(addr);
+            if (string.IsNullOrEmpty(text))
+                return true;
+
+            char first = text[0];
+            if (first > 0x7F || !(char.IsLetter(first) || first == '_'))
+                return false;
+
+            foreach (char c in text)
+            {
+                if (c > 0x7F || !(char.IsLetterOrDigit(c) || c == '_'))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private bool IsSpeakerName(int addr)
+        {
+            string text = ReadStringAtAddress(addr);
+            if (string.IsNullOrEmpty(text) || IsResourceId(addr))
+                return false;
+            if (text.StartsWith("「") || text.StartsWith("『") || text.StartsWith("（"))
+                return false;
+            if (text.IndexOfAny(new[] { '。', '！', '？', '\n' }) >= 0)
+                return false;
+            if (text.Contains("──") || text.Contains("…"))
+                return false;
+            return text.Length <= 18;
+        }
+
+        private bool IsMessageText(int addr)
+        {
+            string text = ReadStringAtAddress(addr);
+            if (string.IsNullOrEmpty(text) || IsResourceId(addr))
+                return false;
+            if (text.StartsWith("「") || text.StartsWith("『"))
+                return true;
+            if (text.Length >= 6)
+                return true;
+            return text.IndexOfAny(new[] { '。', '！', '？', '、' }) >= 0 ||
+                   text.Contains("──") ||
+                   text.Contains("…");
+        }
+
+        private bool IsDisplayText(int addr)
+        {
+            if (IsEmptyString(addr) || IsResourceId(addr))
+                return false;
+
+            foreach (char c in ReadStringAtAddress(addr))
+            {
+                if (c > 0x7F)
+                    return true;
+            }
+
+            return false;
         }
 
         private struct StackItem
