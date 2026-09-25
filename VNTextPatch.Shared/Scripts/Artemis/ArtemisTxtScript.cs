@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using VNTextPatch.Shared.Util;
@@ -9,7 +9,7 @@ namespace VNTextPatch.Shared.Scripts.Artemis
     {
         public override string Extension => ".art";
         
-        private static readonly Regex CommandRegex = new Regex(@"^\s*\[(?<command>[^\]' ]+)(?: +(?<attrname>[^\]= ]+)(?: *= *(?<attrvalue>""(?:\\""|[^""])*""|'(?:\\'|[^'])*'|[^\]""' ]*))?)*\]\s*$", RegexOptions.Compiled);
+        private static readonly Regex CommandRegex = new Regex(@"^\s*\[(?<command>[^\]' ]+)(?: +(?<attrname>[^\]= ]+)(?: *= *(?<attrvalue>""(?:\\""|[^""])*""|'(?:\\'|[^'])*'|[^\]""' ]*))?)*\s*\]\s*$", RegexOptions.Compiled);
 
         private bool _currentRangeIsUnquotedAttribute;
 
@@ -90,6 +90,13 @@ namespace VNTextPatch.Shared.Scripts.Artemis
                         yield return textRange.Value;
 
                     break;
+
+                case "title":
+                    Range? titleRange = GetAttributeValueRange(command, "text");
+                    if (titleRange != null)
+                        yield return titleRange.Value;
+
+                    break;
             }
         }
 
@@ -118,7 +125,7 @@ namespace VNTextPatch.Shared.Scripts.Artemis
 
         protected override string GetTextForWrite(Range range, ScriptString str)
         {
-            string text = ProportionalWordWrapper.Default.Wrap(str.Text);
+            string text = str.Text;
             if (_currentRangeIsUnquotedAttribute && text.Contains(" "))
                 text = $"\"{text}\"";
 
