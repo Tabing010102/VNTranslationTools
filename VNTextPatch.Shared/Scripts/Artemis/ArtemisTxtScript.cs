@@ -32,6 +32,13 @@ namespace VNTextPatch.Shared.Scripts.Artemis
                 Match commandMatch = CommandRegex.Match(line);
                 if (commandMatch.Success)
                 {
+                    if (messageStartPos >= 0)
+                    {
+                        yield return new Range(messageStartPos, messageEndPos - messageStartPos, ScriptStringType.Message);
+                        messageStartPos = -1;
+                        messageEndPos = -1;
+                    }
+
                     foreach (Range lineRange in GetCommandRanges(commandMatch))
                     {
                         Range fileRange = lineRange;
@@ -60,6 +67,11 @@ namespace VNTextPatch.Shared.Scripts.Artemis
                     messageStartPos = -1;
                     messageEndPos = -1;
                 }
+            }
+
+            if (messageStartPos >= 0)
+            {
+                yield return new Range(messageStartPos, messageEndPos - messageStartPos, ScriptStringType.Message);
             }
         }
 
@@ -95,6 +107,13 @@ namespace VNTextPatch.Shared.Scripts.Artemis
                     Range? titleRange = GetAttributeValueRange(command, "text");
                     if (titleRange != null)
                         yield return titleRange.Value;
+
+                    break;
+
+                case "backlogtext_set":
+                    Range? backlogRange = GetAttributeValueRange(command, "data");
+                    if (backlogRange != null)
+                        yield return backlogRange.Value;
 
                     break;
             }
