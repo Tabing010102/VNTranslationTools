@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using VNTextPatch.Shared.Util;
@@ -44,6 +45,12 @@ namespace VNTextPatch.Shared.Scripts.Ethornell
 
         public void WritePatched(IEnumerable<ScriptString> strings, ScriptLocation location)
         {
+            if (ConfigurationManager.AppSettings["EthornellAppendOnly"] == "true")
+            {
+                WriteAppendOnly(strings, location);
+                return;
+            }
+
             using (Stream inputStream = new MemoryStream(_scenarioData))
             using (Stream outputStream = File.Open(location.ToFilePath(), FileMode.Create, FileAccess.Write))
             {
@@ -57,6 +64,43 @@ namespace VNTextPatch.Shared.Scripts.Ethornell
                 }
 
                 stringStream.CopyTo(outputStream);
+            }
+        }
+
+        private void WriteAppendOnly(IEnumerable<ScriptString> strings, ScriptLocation location)
+        {
+            // Retain the original pool and every internal/debug string pointer.
+            // Only redirect changed name/message operands to strings at EOF.
+            using (MemoryStream output = new MemoryStream())
+            using (BinaryWriter writer = new BinaryWriter(output))
+            using (BinaryReader reader = new BinaryReader(new MemoryStream(_scenarioData)))
+            using (IEnumerator<ScriptString> enumerator = strings.GetEnumerator())
+            {
+                output.Write(_scenarioData, 0, _scenarioData.Length);
+                Dictionary<string, int> offsets = new Dictionary<string, int>();
+                foreach (EthornellScriptString str in _strings.Where(s => s.Type != ScriptStringType.Internal))
+                {
+                    if (!enumerator.MoveNext())
+                        throw new InvalidDataException("Not enough strings in script file");
+
+                    string text = enumerator.Current.Text;
+                    if (text == ReadString(reader, str.TextOffset))
+                        continue;
+
+                    if (!offsets.TryGetValue(text, out int address))
+                    {
+                        output.Position = output.Length;
+                        address = (int)output.Position - _codeOffset;
+                        writer.WriteZeroTerminatedSjisString(text);
+                        offsets.Add(text, address);
+                    }
+                    output.Position = str.OperandOffset;
+                    writer.Write(address);
+                }
+                if (enumerator.MoveNext())
+                    throw new InvalidDataException("Too many strings in script file");
+
+                File.WriteAllBytes(location.ToFilePath(), output.ToArray());
             }
         }
 
@@ -93,7 +137,8 @@ namespace VNTextPatch.Shared.Scripts.Ethornell
                             throw new InvalidDataException("Not enough strings in script file");
 
                         text = scriptStringEnumerator.Current.Text;
-                        text = ProportionalWordWrapper.Default.Wrap(text);
+                        if (ConfigurationManager.AppSettings["EthornellAutoWrap"] != "false")
+                            text = ProportionalWordWrapper.Default.Wrap(text);
                     }
 
                     int offset;
