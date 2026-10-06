@@ -51,6 +51,10 @@ BOOL ImportHooker::PatchGameImport(void* pContext, DWORD nOrdinal, LPCSTR pszFun
 
 FARPROC ImportHooker::GetProcAddressHook(HMODULE hModule, LPCSTR lpProcName)
 {
+    // Import by ordinal: lpProcName is a WORD value, not a string pointer
+    if (IS_INTRESOURCE(lpProcName))
+        return GetProcAddress(hModule, lpProcName);
+
     auto it = ReplacementFuncs.find(lpProcName);
     if (it != ReplacementFuncs.end())
         return (FARPROC)it->second;
