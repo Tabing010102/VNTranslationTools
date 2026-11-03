@@ -66,7 +66,7 @@ string SjisTunnelEncoding::Encode(const wchar_t* pText, int count)
             {
                 Mappings.push_back(widechar);
                 mappingIdx = Mappings.size() - 1;
-                if (mappingIdx == 0x3B * (0x40 - sizeof(LowBytesToAvoid) - 1))
+                if (mappingIdx == 0x3B * LowBytesPerHighByte)
                     throw exception("SJIS tunnel limit exceeded");
             }
             else
@@ -144,10 +144,10 @@ void SjisTunnelEncoding::Init()
 
 WORD SjisTunnelEncoding::MappingIndexToTunnelChar(int index)
 {
-    int highIdx = index / (0x40 - sizeof(LowBytesToAvoid) - 1);
-    int lowIdx = index % (0x40 - sizeof(LowBytesToAvoid) - 1);
+    int highIdx = index / LowBytesPerHighByte;
+    int lowIdx = index % LowBytesPerHighByte;
     BYTE highByte = highIdx < 0x1F ? 0x81 + highIdx : 0xE0 + (highIdx - 0x1F);
-    BYTE lowByte = 1 + lowIdx;
+    BYTE lowByte = FirstLowByte + lowIdx;
     for (int i = 0; i < sizeof(LowBytesToAvoid); i++)
     {
         if (lowByte >= LowBytesToAvoid[i])
@@ -162,7 +162,7 @@ int SjisTunnelEncoding::TunnelCharToMappingIndex(WORD tunnelChar)
     BYTE highByte = (BYTE)(tunnelChar >> 8);
     BYTE lowByte = (BYTE)tunnelChar;
 
-    if (!IsSjisHighByte(highByte) || lowByte == 0 || lowByte >= 0x40)
+    if (!IsSjisHighByte(highByte) || lowByte < FirstLowByte || lowByte >= 0x40)
         return -1;
 
     int highIdx = highByte < 0xA0 ? highByte - 0x81 : 0x1F + (highByte - 0xE0);
@@ -173,9 +173,9 @@ int SjisTunnelEncoding::TunnelCharToMappingIndex(WORD tunnelChar)
         if (lowIdx > LowBytesToAvoid[i])
             lowIdx--;
     }
-    lowIdx--;
+    lowIdx -= FirstLowByte;
     
-    return highIdx * (0x40 - sizeof(LowBytesToAvoid) - 1) + lowIdx;
+    return highIdx * LowBytesPerHighByte + lowIdx;
 }
 
 bool SjisTunnelEncoding::IsSjisHighByte(BYTE byte)

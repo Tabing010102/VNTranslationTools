@@ -68,11 +68,14 @@ This approach makes it possible to have a large number of otherwise unsupported 
 
 By default, sjis_ext.bin is created inside the output folder, next to the patched game files. You can pass a fourth argument to `insertlocal` and `insertgdocs` to specify an alternative path (which should include the file name). The proxy DLL expects the file to be in the same folder as the game .exe.
 
+On this branch, tunneled characters only use the trail bytes 0x21-0x3F (except `,`), because engines like QLIE strip trailing bytes up to 0x20 from text lines (Delphi's `Trim()`). This limits tunneling to 1770 characters, and the files are incompatible with VNTextPatch/VNTextProxy builds that use the original layout (trail bytes 0x01-0x3F).
+
 # VNTextProxy
 A proxy d2d1.dll that hooks into the game and helps with making it display non-Japanese text. It can do the following:
 * Render non-SJIS characters in SJIS-only games (see previous section).
 * Load a custom font (.ttf/.ttc/.otf) from the game's folder and force the game to use it. The font file name should match the font name.
-* Reposition rendered characters for correct text display with proportional fonts (as many visual novel engines only do monospace). This currently works for TextOutA() and ID2D1RenderTarget::DrawText().
+* Reposition rendered characters for correct text display with proportional fonts (as many visual novel engines only do monospace). This currently works for TextOutA(), ExtTextOutA() and ID2D1RenderTarget::DrawText().
+* On non-Japanese systems (e.g. Chinese, code page 936), keep SJIS text and tunneled characters intact in Delphi controls (TButton, window titles, DrawTextA) and in Delphi string functions that rely on CharUpperBuffA/CharLowerBuffA/CompareStringA (such as AnsiReplaceText). List GB2312 fonts (under their English names) in SHIFTJIS_CHARSET font enumeration so Chinese fonts can be selected.
 * To a certain degree, make SJIS-only games Unicode compatible. This allows them not only to run on non-Japanese systems without crashing, but also to work with non-SJIS file paths and accept non-SJIS keyboard input (including from IMEs).
 * If the above is not sufficient for preventing crashes, VNTextProxy can also automatically relaunch the game using [Locale Emulator](https://github.com/xupefei/Locale-Emulator) on non-Japanese systems. Users don't need to install the emulator for this; instead, you should bundle LoaderDll.dll and LocaleEmulator.dll with the game.
 

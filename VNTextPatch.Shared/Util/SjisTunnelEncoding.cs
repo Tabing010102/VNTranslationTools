@@ -9,6 +9,12 @@ namespace VNTextPatch.Shared.Util
     {
         private static readonly Encoding SjisEncoding = GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
 
+        // Tunnel characters use low bytes 0x21-0x3F except ','. Bytes 0x01-0x20 are avoided because engines strip
+        // control characters and spaces from text (e.g. Delphi's Trim() in QLIE), and ',' because engines use it to
+        // separate arguments. Must match SjisTunnelEncoding in VNTextProxy.
+        private const int FirstLowByte = 0x21;
+        private const int LowBytesPerHighByte = 0x40 - FirstLowByte - 1;
+
         private readonly byte[] _byteArray = new byte[2];
         private readonly Dictionary<char, char> _mappings = new Dictionary<char, char>();
 
@@ -193,20 +199,12 @@ namespace VNTextPatch.Shared.Util
                 return sjisChar;
 
             int sjisIdx = _mappings.Count;
-            if (sjisIdx == 0x3B * 0x3A)
+            if (sjisIdx == 0x3B * LowBytesPerHighByte)
                 throw new Exception("SJIS tunnel limit exceeded");
 
-            int highSjisIdx = Math.DivRem(sjisIdx, 0x3A, out int lowSjisIdx);
+            int highSjisIdx = Math.DivRem(sjisIdx, LowBytesPerHighByte, out int lowSjisIdx);
             int highByte = highSjisIdx < 0x1F ? 0x81 + highSjisIdx : 0xE0 + (highSjisIdx - 0x1F);
-            int lowByte = 1 + lowSjisIdx;
-            if (lowByte >= '\t')
-                lowByte++;
-            if (lowByte >= '\n')
-                lowByte++;
-            if (lowByte >= '\r')
-                lowByte++;
-            if (lowByte >= ' ')
-                lowByte++;
+            int lowByte = FirstLowByte + lowSjisIdx;
             if (lowByte >= ',')
                 lowByte++;
 

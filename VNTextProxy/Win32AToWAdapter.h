@@ -10,6 +10,13 @@ private:
     static BOOL __stdcall IsDBCSLeadByteHook(BYTE TestChar);
     static int __stdcall MultiByteToWideCharHook(UINT codePage, DWORD flags, LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar);
     static int __stdcall WideCharToMultiByteHook(UINT codePage, DWORD flags, LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar);
+    static LPSTR __stdcall CharUpperAHook(LPSTR lpsz);
+    static LPSTR __stdcall CharLowerAHook(LPSTR lpsz);
+    static DWORD __stdcall CharUpperBuffAHook(LPSTR lpsz, DWORD cchLength);
+    static DWORD __stdcall CharLowerBuffAHook(LPSTR lpsz, DWORD cchLength);
+    static LPSTR ChangeCase(LPSTR lpsz, bool upper);
+    static void ChangeCase(char* pText, int length, bool upper);
+    static int __stdcall CompareStringAHook(LCID Locale, DWORD dwCmpFlags, PCNZCH lpString1, int cchCount1, PCNZCH lpString2, int cchCount2);
     
     static HANDLE __stdcall CreateEventAHook(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset, BOOL bInitialState, LPCSTR lpName);
     static HANDLE __stdcall OpenEventAHook(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCSTR lpName);
@@ -50,6 +57,11 @@ private:
     static BOOL __stdcall InsertMenuAHook(HMENU hMenu, UINT uPosition, UINT uFlags, UINT_PTR uIDNewItem, LPCSTR lpNewItem);
     static BOOL __stdcall InsertMenuItemAHook(HMENU hmenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOA lpmi);
     static int __stdcall MessageBoxAHook(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType);
+    static BOOL __stdcall SetWindowTextAHook(HWND hWnd, LPCSTR lpString);
+    static LRESULT __stdcall CallWindowProcAHook(WNDPROC lpPrevWndFunc, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    static WNDPROC GetUnicodeControlProc(WNDPROC pAnsiProc);
+    static int __stdcall DrawTextAHook(HDC hdc, LPCSTR lpchText, int cchText, LPRECT lprc, UINT format);
+    static int __stdcall DrawTextExAHook(HDC hdc, LPSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp);
 
     static BOOL __stdcall GetMonitorInfoAHook(HMONITOR hMonitor, LPMONITORINFO lpmi);
     static BOOL __stdcall EnumDisplayDevicesAHook(LPCSTR lpDevice, DWORD iDevNum, PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
@@ -89,6 +101,8 @@ private:
     };
 
     static inline std::map<HWND, WNDPROC> WindowProcs{};
+    static inline bool UnicodeControlProcsInitialized{};
+    static inline std::map<WNDPROC, WNDPROC> UnicodeControlProcs{};
     static inline std::wstring PendingImeCompositionChars{};
     static inline std::vector<MSG> PendingWindowMessages{};
 };

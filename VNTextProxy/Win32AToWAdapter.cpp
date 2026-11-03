@@ -13,6 +13,11 @@ void Win32AToWAdapter::Init()
             { "IsDBCSLeadByte", IsDBCSLeadByteHook },
             { "MultiByteToWideChar", MultiByteToWideCharHook },
             { "WideCharToMultiByte", WideCharToMultiByteHook },
+            { "CharUpperA", CharUpperAHook },
+            { "CharLowerA", CharLowerAHook },
+            { "CharUpperBuffA", CharUpperBuffAHook },
+            { "CharLowerBuffA", CharLowerBuffAHook },
+            { "CompareStringA", CompareStringAHook },
 
             { "CreateEventA", CreateEventAHook },
             { "OpenEventA", OpenEventAHook },
@@ -51,6 +56,10 @@ void Win32AToWAdapter::Init()
             { "InsertMenuA", InsertMenuAHook },
             { "InsertMenuItemA", InsertMenuItemAHook },
             { "MessageBoxA", MessageBoxAHook },
+            { "SetWindowTextA", SetWindowTextAHook },
+            { "CallWindowProcA", CallWindowProcAHook },
+            { "DrawTextA", DrawTextAHook },
+            { "DrawTextExA", DrawTextExAHook },
 
             { "GetMonitorInfoA", GetMonitorInfoAHook },
             { "EnumDisplayDevicesA", EnumDisplayDevicesAHook },
@@ -123,6 +132,103 @@ int Win32AToWAdapter::WideCharToMultiByteHook(UINT codePage, DWORD flags, LPCWCH
     }
 
     return numChars;
+}
+
+// Windows implements the case conversion functions by converting the text with the system code page. On a
+// non-Japanese system, this changes SJIS characters and turns tunneled characters into '?', which shortens the
+// text and shifts the remainder of the buffer. Delphi's case-insensitive StringReplace() then uses positions in the
+// shifted copy to cut the original string. Convert the way a Japanese system would and keep tunneled characters as-is.
+LPSTR Win32AToWAdapter::CharUpperAHook(LPSTR lpsz)
+{
+    return ChangeCase(lpsz, true);
+}
+
+LPSTR Win32AToWAdapter::CharLowerAHook(LPSTR lpsz)
+{
+    return ChangeCase(lpsz, false);
+}
+
+DWORD Win32AToWAdapter::CharUpperBuffAHook(LPSTR lpsz, DWORD cchLength)
+{
+    if (lpsz != nullptr)
+        ChangeCase(lpsz, cchLength, true);
+
+    return lpsz != nullptr ? cchLength : 0;
+}
+
+DWORD Win32AToWAdapter::CharLowerBuffAHook(LPSTR lpsz, DWORD cchLength)
+{
+    if (lpsz != nullptr)
+        ChangeCase(lpsz, cchLength, false);
+
+    return lpsz != nullptr ? cchLength : 0;
+}
+
+LPSTR Win32AToWAdapter::ChangeCase(LPSTR lpsz, bool upper)
+{
+    // A pointer with a zero high word is a single character rather than a string
+    if (((DWORD_PTR)lpsz & ~(DWORD_PTR)0xFFFF) == 0)
+    {
+        char c = (char)(DWORD_PTR)lpsz;
+        ChangeCase(&c, 1, upper);
+        return (LPSTR)(DWORD_PTR)(BYTE)c;
+    }
+
+    ChangeCase(lpsz, strlen(lpsz), upper);
+    return lpsz;
+}
+
+void Win32AToWAdapter::ChangeCase(char* pText, int length, bool upper)
+{
+    int i = 0;
+    while (i < length)
+    {
+        BYTE c = pText[i];
+        if (!IsDBCSLeadByteHook(c) || i + 1 >= length)
+        {
+            if (upper && c >= 'a' && c <= 'z')
+                pText[i] = c - 'a' + 'A';
+            else if (!upper && c >= 'A' && c <= 'Z')
+                pText[i] = c - 'A' + 'a';
+
+            i++;
+            continue;
+        }
+
+        // Fullwidth Latin, Greek, Cyrillic and Roman numerals have case. Tunneled characters (low byte < 0x40) never match.
+        wchar_t original;
+        if (MultiByteToWideChar(932, MB_ERR_INVALID_CHARS, pText + i, 2, &original, 1) == 1)
+        {
+            wchar_t converted = original;
+            if (upper)
+                CharUpperBuffW(&converted, 1);
+            else
+                CharLowerBuffW(&converted, 1);
+
+            char multibyte[2];
+            BOOL usedDefaultChar = false;
+            if (converted != original &&
+                WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, &converted, 1, multibyte, sizeof(multibyte), nullptr, &usedDefaultChar) == 2 &&
+                !usedDefaultChar)
+            {
+                pText[i] = multibyte[0];
+                pText[i + 1] = multibyte[1];
+            }
+        }
+        i += 2;
+    }
+}
+
+int Win32AToWAdapter::CompareStringAHook(LCID Locale, DWORD dwCmpFlags, PCNZCH lpString1, int cchCount1, PCNZCH lpString2, int cchCount2)
+{
+    // Windows would convert the strings with the locale's code page, where all tunneled characters become '?'
+    // (and thus compare as equal)
+    if (lpString1 == nullptr || lpString2 == nullptr)
+        return CompareStringA(Locale, dwCmpFlags, lpString1, cchCount1, lpString2, cchCount2);
+
+    wstring string1 = SjisTunnelEncoding::Decode(lpString1, cchCount1);
+    wstring string2 = SjisTunnelEncoding::Decode(lpString2, cchCount2);
+    return CompareStringW(Locale, dwCmpFlags, string1.data(), string1.size(), string2.data(), string2.size());
 }
 
 HANDLE Win32AToWAdapter::CreateEventAHook(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset, BOOL bInitialState, LPCSTR lpName)
@@ -606,6 +712,121 @@ BOOL Win32AToWAdapter::InsertMenuItemAHook(HMENU hmenu, UINT item, BOOL fByPosit
 int Win32AToWAdapter::MessageBoxAHook(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType)
 {
     return MessageBoxW(hWnd, SjisTunnelEncoding::Decode(lpText).c_str(), SjisTunnelEncoding::Decode(lpCaption).c_str(), uType);
+}
+
+BOOL Win32AToWAdapter::SetWindowTextAHook(HWND hWnd, LPCSTR lpString)
+{
+    // ANSI windows receive WM_SETTEXT as-is and are handled by DefWindowProcAHook/CallWindowProcAHook,
+    // but for Unicode windows Windows would convert the text using the system code page
+    if (hWnd != nullptr && lpString != nullptr && IsWindowUnicode(hWnd))
+        return SetWindowTextW(hWnd, SjisTunnelEncoding::Decode(lpString).c_str());
+
+    return SetWindowTextA(hWnd, lpString);
+}
+
+LRESULT Win32AToWAdapter::CallWindowProcAHook(WNDPROC lpPrevWndFunc, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    // VCL controls such as TButton superclass a system control and forward messages to its ANSI window procedure,
+    // which stores the window text after converting it with the system code page. Route the text-setting messages
+    // to the Unicode window procedure instead so the text gets decoded as (tunneled) SJIS.
+    if ((msg == WM_NCCREATE || msg == WM_CREATE || msg == WM_SETTEXT) && lParam != 0)
+    {
+        WNDPROC pUnicodeProc = GetUnicodeControlProc(lpPrevWndFunc);
+        if (pUnicodeProc != nullptr)
+        {
+            if (msg == WM_SETTEXT)
+            {
+                wstring text = SjisTunnelEncoding::Decode((const char*)lParam);
+                return CallWindowProcW(pUnicodeProc, hWnd, msg, wParam, (LPARAM)text.c_str());
+            }
+
+            CREATESTRUCTA* pCreateA = (CREATESTRUCTA*)lParam;
+            bool isNameOrdinal = pCreateA->lpszName != nullptr && (BYTE)pCreateA->lpszName[0] == 0xFF;
+            if (!isNameOrdinal)
+            {
+                CREATESTRUCTW createW;
+                memcpy(&createW, pCreateA, sizeof(createW));
+
+                wstring name;
+                if (pCreateA->lpszName != nullptr)
+                {
+                    name = SjisTunnelEncoding::Decode(pCreateA->lpszName);
+                    createW.lpszName = name.c_str();
+                }
+
+                wstring className;
+                if ((DWORD_PTR)pCreateA->lpszClass & ~(DWORD_PTR)0xFFFF)
+                {
+                    className = StringUtil::ToWString(pCreateA->lpszClass);
+                    createW.lpszClass = className.c_str();
+                }
+
+                return CallWindowProcW(pUnicodeProc, hWnd, msg, wParam, (LPARAM)&createW);
+            }
+        }
+    }
+
+    return CallWindowProcA(lpPrevWndFunc, hWnd, msg, wParam, lParam);
+}
+
+WNDPROC Win32AToWAdapter::GetUnicodeControlProc(WNDPROC pAnsiProc)
+{
+    if (!UnicodeControlProcsInitialized)
+    {
+        UnicodeControlProcsInitialized = true;
+
+        // Only controls that keep their text in the window itself (rather than in an internal ANSI buffer)
+        static const char* const classNames[] = { "Button", "Static" };
+        HINSTANCE instances[] = { nullptr, GetModuleHandle(nullptr) };
+        for (const char* pClassName : classNames)
+        {
+            wstring classNameW = StringUtil::ToWString(pClassName);
+            for (HINSTANCE hInstance : instances)
+            {
+                WNDCLASSEXA classA{ sizeof(classA) };
+                WNDCLASSEXW classW{ sizeof(classW) };
+                if (GetClassInfoExA(hInstance, pClassName, &classA) &&
+                    GetClassInfoExW(hInstance, classNameW.c_str(), &classW) &&
+                    classA.lpfnWndProc != classW.lpfnWndProc)
+                {
+                    UnicodeControlProcs[classA.lpfnWndProc] = classW.lpfnWndProc;
+                }
+            }
+        }
+    }
+
+    auto it = UnicodeControlProcs.find(pAnsiProc);
+    return it != UnicodeControlProcs.end() ? it->second : nullptr;
+}
+
+int Win32AToWAdapter::DrawTextAHook(HDC hdc, LPCSTR lpchText, int cchText, LPRECT lprc, UINT format)
+{
+    return DrawTextExAHook(hdc, const_cast<LPSTR>(lpchText), cchText, lprc, format, nullptr);
+}
+
+int Win32AToWAdapter::DrawTextExAHook(HDC hdc, LPSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
+{
+    if (lpchText == nullptr)
+        return DrawTextExA(hdc, lpchText, cchText, lprc, format, lpdtp);
+
+    wstring text = SjisTunnelEncoding::Decode(lpchText, cchText);
+    if (!(format & DT_MODIFYSTRING))
+        return DrawTextExW(hdc, text.data(), text.size(), lprc, format, lpdtp);
+
+    // DT_MODIFYSTRING may append up to four characters (the caller's buffer has room for them)
+    int byteCount = cchText < 0 ? strlen(lpchText) : cchText;
+    int textLength = text.size();
+    text.resize(textLength + 5, L'\0');
+    int result = DrawTextExW(hdc, text.data(), textLength, lprc, format, lpdtp);
+
+    string modified = SjisTunnelEncoding::Encode(text.c_str());
+    int maxBytes = byteCount + 4;
+    int copyLength = min((int)modified.size(), maxBytes);
+    memcpy(lpchText, modified.data(), copyLength);
+    if (copyLength < maxBytes)
+        lpchText[copyLength] = '\0';
+
+    return result;
 }
 
 BOOL Win32AToWAdapter::GetMonitorInfoAHook(HMONITOR hMonitor, LPMONITORINFO lpmi)
