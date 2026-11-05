@@ -58,6 +58,7 @@
 #include "Win32AToWAdapter.h"
 #include "Proportionalizer.h"
 #include "GdiProportionalizer.h"
+#include "D3DXProportionalizer.h"
 #include "D2DProportionalizer.h"
 #include "LocaleEmulator.h"
 

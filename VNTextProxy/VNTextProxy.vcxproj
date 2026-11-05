@@ -99,6 +99,7 @@
     <ClInclude Include="CompilerSpecific\Rtti\BorlandTypeDescriptor.h" />
     <ClInclude Include="CompilerSpecific\Rtti\MsvcRttiCompleteObjectLocator.h" />
     <ClInclude Include="D2DProportionalizer.h" />
+    <ClInclude Include="D3DXProportionalizer.h" />
     <ClInclude Include="GdiProportionalizer.h" />
     <ClInclude Include="ImportHooker.h" />
     <ClInclude Include="LocaleEmulator.h" />
@@ -126,6 +127,7 @@
   <ItemGroup>
     <ClCompile Include="CompilerSpecific\CompilerHelper.cpp" />
     <ClCompile Include="D2DProportionalizer.cpp" />
+    <ClCompile Include="D3DXProportionalizer.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="GdiProportionalizer.cpp" />
     <ClCompile Include="ImportHooker.cpp" />

@@ -51,6 +51,9 @@
     <ClInclude Include="D2DProportionalizer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="D3DXProportionalizer.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Util\ComPtr.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -138,6 +141,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="D2DProportionalizer.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="D3DXProportionalizer.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Util\Path.cpp">

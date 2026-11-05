@@ -30,6 +30,7 @@ void Initialize()
     Win32AToWAdapter::Init();
 
     GdiProportionalizer::Init();
+    D3DXProportionalizer::Init();
     D2DProportionalizer::Init();
 
     EnginePatches::Init();
