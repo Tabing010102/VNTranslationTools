@@ -2,6 +2,12 @@
 
 using namespace std;
 
+namespace
+{
+    volatile LONG GdiCreateFontCallCount = 0;
+    volatile LONG GdiTextOutCallCount = 0;
+}
+
 void GdiProportionalizer::Init()
 {
     Proportionalizer::Init();
@@ -64,6 +70,13 @@ HFONT GdiProportionalizer::CreateFontAHook(int cHeight, int cWidth, int cEscapem
     DWORD bItalic, DWORD bUnderline, DWORD bStrikeOut, DWORD iCharSet, DWORD iOutPrecision, DWORD iClipPrecision,
     DWORD iQuality, DWORD iPitchAndFamily, LPCSTR pszFaceName)
 {
+    LONG callNumber = InterlockedIncrement(&GdiCreateFontCallCount);
+    if (callNumber <= 20)
+    {
+        std::string faceName = pszFaceName == nullptr ? "<null>" : TraceLog::Hex(pszFaceName, strnlen_s(pszFaceName, 128), 128);
+        TraceLog::Write("GDI CreateFontA #%ld height=%d charset=%u face_bytes=[%s]", callNumber, cHeight, iCharSet, faceName.c_str());
+    }
+
     return CreateFontWHook(
         cHeight,
         cWidth,
@@ -169,6 +182,20 @@ BOOL GdiProportionalizer::GetTextExtentPoint32AHook(HDC hdc, LPCSTR lpString, in
 BOOL GdiProportionalizer::TextOutAHook(HDC dc, int x, int y, LPCSTR pString, int count)
 {
     wstring text = SjisTunnelEncoding::Decode(pString, count);
+    LONG callNumber = InterlockedIncrement(&GdiTextOutCallCount);
+    if (callNumber <= 100)
+    {
+        size_t rawLength = count < 0 ? strnlen_s(pString, 2048) : static_cast<size_t>(count);
+        std::string decoded = TraceLog::ToUtf8(text.substr(0, 1024));
+        TraceLog::Write(
+            "GDI TextOutA #%ld count=%d raw=[%s] decoded=[%s]",
+            callNumber,
+            count,
+            TraceLog::Hex(pString, rawLength, 2048).c_str(),
+            decoded.c_str()
+        );
+    }
+
     Font* pFont = CurrentFonts[dc];
     if (pFont == nullptr)
     {

@@ -8,6 +8,7 @@ public:
 
 private:
     static void Init();
+    static int PatchImportsFromFile(HMODULE hModule, const std::map<std::string, void*>& replacementFuncs);
     static BOOL __stdcall PatchGameImport(void* pContext, DWORD nOrdinal, LPCSTR pszFunc, void** ppvFunc);
 
     static FARPROC __stdcall GetProcAddressHook(HMODULE hModule, LPCSTR lpProcName);
