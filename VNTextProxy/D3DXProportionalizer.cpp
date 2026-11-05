@@ -107,6 +107,33 @@ void D3DXProportionalizer::Init()
         reinterpret_cast<void*>(CreateFontIndirectWHook)
     );
 
+    // The packed engine can resolve the D3DX export dynamically from a
+    // secondary module, bypassing the main EXE's IAT.  Detour the export as
+    // well as patching the main IAT so both call paths are observable.
+    LONG detourError = DetourTransactionBegin();
+    if (detourError == NO_ERROR)
+    {
+        detourError = DetourUpdateThread(GetCurrentThread());
+        if (detourError == NO_ERROR)
+        {
+            detourError = DetourAttach(
+                reinterpret_cast<PVOID*>(&OriginalCreateFontIndirectW),
+                reinterpret_cast<PVOID>(CreateFontIndirectWHook)
+            );
+        }
+
+        if (detourError == NO_ERROR)
+            detourError = DetourTransactionCommit();
+        else
+            DetourTransactionAbort();
+    }
+
+    TraceLog::Write(
+        "D3DX export detour result=%ld trampoline=%p",
+        detourError,
+        OriginalCreateFontIndirectW
+    );
+
     ImportHooker::Hook(
         {
             { "D3DXCreateFontIndirectW", CreateFontIndirectWHook }
