@@ -20,6 +20,7 @@ namespace
     volatile LONG DrawCallCount = 0;
     volatile LONG PreloadWideCallCount = 0;
     volatile LONG DrawWideCallCount = 0;
+    volatile LONG FontMethodCallCount = 0;
 
     size_t GetRawTextLength(LPCSTR text, INT count)
     {
@@ -110,6 +111,13 @@ namespace
             utf8.c_str(),
             codePoints.c_str()
         );
+    }
+
+    void LogFontMethod(const char* method, const char* detail)
+    {
+        LONG callNumber = InterlockedIncrement(&FontMethodCallCount);
+        if (callNumber <= 200)
+            TraceLog::Write("D3DX %s #%ld %s", method, callNumber, detail);
     }
 }
 
@@ -237,10 +245,18 @@ void D3DXProportionalizer::PatchFont(void* font)
     {
         OriginalPreloadTextA = reinterpret_cast<PreloadTextAFunction>(vtable[12]);
         OriginalPreloadTextW = reinterpret_cast<PreloadTextWFunction>(vtable[13]);
+        OriginalGetDC = reinterpret_cast<GetDCFunction>(vtable[8]);
+        OriginalGetGlyphData = reinterpret_cast<GetGlyphDataFunction>(vtable[9]);
+        OriginalPreloadCharacters = reinterpret_cast<PreloadCharactersFunction>(vtable[10]);
+        OriginalPreloadGlyphs = reinterpret_cast<PreloadCharactersFunction>(vtable[11]);
         OriginalDrawTextA = reinterpret_cast<DrawTextAFunction>(vtable[14]);
         OriginalDrawTextW = reinterpret_cast<DrawTextWFunction>(vtable[15]);
         TraceLog::Write(
-            "D3DX PatchFont originals PreloadA=%p PreloadW=%p DrawA=%p DrawW=%p",
+            "D3DX PatchFont originals GetDC=%p GetGlyphData=%p PreloadChars=%p PreloadGlyphs=%p PreloadA=%p PreloadW=%p DrawA=%p DrawW=%p",
+            OriginalGetDC,
+            OriginalGetGlyphData,
+            OriginalPreloadCharacters,
+            OriginalPreloadGlyphs,
             OriginalPreloadTextA,
             OriginalPreloadTextW,
             OriginalDrawTextA,
@@ -248,13 +264,21 @@ void D3DXProportionalizer::PatchFont(void* font)
         );
     }
 
-    MemoryUnprotector unprotect(&vtable[12], sizeof(void*) * 4);
+    MemoryUnprotector unprotect(&vtable[8], sizeof(void*) * 8);
+    vtable[8] = reinterpret_cast<void*>(GetDCHook);
+    vtable[9] = reinterpret_cast<void*>(GetGlyphDataHook);
+    vtable[10] = reinterpret_cast<void*>(PreloadCharactersHook);
+    vtable[11] = reinterpret_cast<void*>(PreloadGlyphsHook);
     vtable[12] = reinterpret_cast<void*>(PreloadTextAHook);
     vtable[13] = reinterpret_cast<void*>(PreloadTextWHook);
     vtable[14] = reinterpret_cast<void*>(DrawTextAHook);
     vtable[15] = reinterpret_cast<void*>(DrawTextWHook);
     TraceLog::Write(
-        "D3DX PatchFont installed vtable[12]=%p vtable[13]=%p vtable[14]=%p vtable[15]=%p",
+        "D3DX PatchFont installed vtable[8]=%p vtable[9]=%p vtable[10]=%p vtable[11]=%p vtable[12]=%p vtable[13]=%p vtable[14]=%p vtable[15]=%p",
+        vtable[8],
+        vtable[9],
+        vtable[10],
+        vtable[11],
         vtable[12],
         vtable[13],
         vtable[14],
@@ -288,6 +312,44 @@ HRESULT __stdcall D3DXProportionalizer::PreloadTextWHook(void* font, LPCWSTR tex
         return E_FAIL;
     }
     return OriginalPreloadTextW(font, text, count);
+}
+
+HDC __stdcall D3DXProportionalizer::GetDCHook(void* font)
+{
+    LogFontMethod("GetDC", "called");
+    if (OriginalGetDC == nullptr)
+        return nullptr;
+    return OriginalGetDC(font);
+}
+
+HRESULT __stdcall D3DXProportionalizer::GetGlyphDataHook(void* font, UINT glyph, void** texture, RECT* blackBox, POINT* cellInc)
+{
+    char detail[128]{};
+    sprintf_s(detail, "glyph=0x%X", glyph);
+    LogFontMethod("GetGlyphData", detail);
+    if (OriginalGetGlyphData == nullptr)
+        return E_FAIL;
+    return OriginalGetGlyphData(font, glyph, texture, blackBox, cellInc);
+}
+
+HRESULT __stdcall D3DXProportionalizer::PreloadCharactersHook(void* font, UINT first, UINT last)
+{
+    char detail[128]{};
+    sprintf_s(detail, "first=0x%X last=0x%X", first, last);
+    LogFontMethod("PreloadCharacters", detail);
+    if (OriginalPreloadCharacters == nullptr)
+        return E_FAIL;
+    return OriginalPreloadCharacters(font, first, last);
+}
+
+HRESULT __stdcall D3DXProportionalizer::PreloadGlyphsHook(void* font, UINT first, UINT last)
+{
+    char detail[128]{};
+    sprintf_s(detail, "first=0x%X last=0x%X", first, last);
+    LogFontMethod("PreloadGlyphs", detail);
+    if (OriginalPreloadGlyphs == nullptr)
+        return E_FAIL;
+    return OriginalPreloadGlyphs(font, first, last);
 }
 
 INT __stdcall D3DXProportionalizer::DrawTextAHook(void* font, void* sprite, LPCSTR text, INT count, RECT* rect, DWORD format, DWORD color)
