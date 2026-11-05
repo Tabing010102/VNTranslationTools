@@ -4,16 +4,6 @@ using namespace std;
 
 namespace
 {
-    bool IsSafeYaneuraoFallback(const char* functionName)
-    {
-        // This executable uses an import table with OriginalFirstThunk=0.
-        // Only the two font entry points need the file-based fallback here.
-        // Patching LoadLibraryA, MessageBoxA, or GetProcAddress changes the
-        // authentication environment and can break DMM's dynamic loader.
-        return strcmp(functionName, "D3DXCreateFontIndirectW") == 0 ||
-            strcmp(functionName, "CreateFontA") == 0;
-    }
-
     DWORD RvaToFileOffset(DWORD rva, const IMAGE_NT_HEADERS32* ntHeaders)
     {
         const IMAGE_SECTION_HEADER* sections = IMAGE_FIRST_SECTION(ntHeaders);
@@ -119,11 +109,6 @@ int ImportHooker::PatchImportsFromFile(HMODULE hModule, const map<string, void*>
             auto replacement = replacementFuncs.find(functionName);
             if (replacement == replacementFuncs.end())
                 continue;
-            if (!IsSafeYaneuraoFallback(functionName))
-            {
-                TraceLog::Write("IAT fallback skipped authentication-sensitive name=%s", functionName);
-                continue;
-            }
 
             void** iatSlot = reinterpret_cast<void**>(reinterpret_cast<BYTE*>(loadedModule) + descriptor.FirstThunk + thunkIndex * sizeof(void*));
             TraceLog::Write(
@@ -174,11 +159,11 @@ void ImportHooker::Init()
         return;
 
     Initialized = true;
-    // Do not replace GetProcAddress globally.  The old implementation could
-    // return a VNTextProxy hook for an unrelated DMM function with the same
-    // name, which is unsafe during authentication.  Static imports are
-    // patched directly by Hook/fallback instead.
-    TraceLog::Write("ImportHooker initialized without GetProcAddress hook");
+    Hook(
+        {
+            { "GetProcAddress", GetProcAddressHook }
+        }
+    );
 }
 
 BOOL ImportHooker::PatchGameImport(void* pContext, DWORD nOrdinal, LPCSTR pszFunc, void** ppvFunc)
