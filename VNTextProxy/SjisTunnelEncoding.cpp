@@ -94,8 +94,6 @@ void SjisTunnelEncoding::PatchGameLookupTable()
     // Certain SJIS engines actually convert text to UTF16 before rendering it, but do so using an internal lookup table
     // rather than calling MultiByteToWideChar(). Find the table and patch it to support tunneling there as well.
 
-    static wchar_t* lastLookupTable = nullptr;
-
     Init();
     if (Mappings.empty())
         return;
@@ -110,18 +108,6 @@ void SjisTunnelEncoding::PatchGameLookupTable()
     // Subtract 0x8140 to get its base.
     pLookupTable -= 0x8140;
 
-    if (pLookupTable != lastLookupTable)
-    {
-        TraceLog::Write(
-            "SJIS lookup table found base=%p image_base=%p image_size=0x%lX mappings=%zu",
-            pLookupTable,
-            pImageStart,
-            imageSize,
-            Mappings.size()
-        );
-        lastLookupTable = pLookupTable;
-    }
-
     map<void*, MemoryUnprotector> unprotectors;
     for (int mappingIdx = 0; mappingIdx < Mappings.size(); mappingIdx++)
     {
@@ -132,16 +118,6 @@ void SjisTunnelEncoding::PatchGameLookupTable()
         unprotectors.try_emplace(pLookupEntryPage, pLookupEntryPage, 0x1000);
 
         *pLookupEntry = Mappings[mappingIdx];
-    }
-
-    if (pLookupTable == lastLookupTable)
-    {
-        static bool loggedPatch = false;
-        if (!loggedPatch)
-        {
-            TraceLog::Write("SJIS lookup table patched entries=%zu", Mappings.size());
-            loggedPatch = true;
-        }
     }
 }
 
@@ -156,10 +132,7 @@ void SjisTunnelEncoding::Init()
     FILE* pFile;
     _wfopen_s(&pFile, filePath.c_str(), L"rb");
     if (pFile == nullptr)
-    {
-        TraceLog::WriteW("SJIS mapping file missing", filePath);
         return;
-    }
 
     fseek(pFile, 0, SEEK_END);
     int fileSize = ftell(pFile);
@@ -167,13 +140,6 @@ void SjisTunnelEncoding::Init()
     Mappings.resize(fileSize / sizeof(wchar_t));
     fread(Mappings.data(), sizeof(wchar_t), Mappings.size(), pFile);
     fclose(pFile);
-
-    TraceLog::Write(
-        "SJIS mapping loaded path=%s bytes=%d wchar_count=%zu",
-        TraceLog::ToUtf8(filePath).c_str(),
-        fileSize,
-        Mappings.size()
-    );
 }
 
 WORD SjisTunnelEncoding::MappingIndexToTunnelChar(int index)

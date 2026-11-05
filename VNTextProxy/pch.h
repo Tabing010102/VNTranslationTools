@@ -17,9 +17,6 @@
 #include <MSAcm.h>
 
 #include <codecvt>
-#include <cstdarg>
-#include <cstdio>
-#include <cstring>
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
@@ -54,7 +51,6 @@
 #include "Patches/EnginePatches.h"
 
 #include "Proxy.h"
-#include "TraceLog.h"
 #include "ImportHooker.h"
 #include "Font.h"
 #include "FontManager.h"

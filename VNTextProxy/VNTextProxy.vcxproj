@@ -100,7 +100,6 @@
     <ClInclude Include="CompilerSpecific\Rtti\MsvcRttiCompleteObjectLocator.h" />
     <ClInclude Include="D2DProportionalizer.h" />
     <ClInclude Include="D3DXProportionalizer.h" />
-    <ClInclude Include="TraceLog.h" />
     <ClInclude Include="GdiProportionalizer.h" />
     <ClInclude Include="ImportHooker.h" />
     <ClInclude Include="LocaleEmulator.h" />
@@ -129,7 +128,6 @@
     <ClCompile Include="CompilerSpecific\CompilerHelper.cpp" />
     <ClCompile Include="D2DProportionalizer.cpp" />
     <ClCompile Include="D3DXProportionalizer.cpp" />
-    <ClCompile Include="TraceLog.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="GdiProportionalizer.cpp" />
     <ClCompile Include="ImportHooker.cpp" />
