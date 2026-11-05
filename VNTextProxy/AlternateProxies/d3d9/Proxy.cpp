@@ -1,5 +1,47 @@
 #include "pch.h"
 
+namespace
+{
+    constexpr DWORD CrackPatchOffset = 0x12C597;
+
+    DWORD WINAPI CrackThread(LPVOID)
+    {
+        HMODULE hGame = GetModuleHandleW(nullptr);
+        if (hGame == nullptr)
+            return 0;
+
+        DWORD imageSize = DetourGetModuleSize(nullptr);
+        if (imageSize <= CrackPatchOffset + 1)
+            return 0;
+
+        BYTE* patchAddress = reinterpret_cast<BYTE*>(hGame) + CrackPatchOffset;
+
+        // The original 9177 proxy waited for the unpacked instruction
+        // "call eax" (FF D0) at this fixed RVA, then replaced it with two
+        // NOPs.  Keep the same patch but do it without the original DLL's
+        // message box and without modifying the packed entry point.
+        for (int i = 0; i < 600; i++)
+        {
+            if (patchAddress[0] == 0xFF && patchAddress[1] == 0xD0)
+            {
+                DWORD oldProtect;
+                if (VirtualProtect(patchAddress, 2, PAGE_EXECUTE_READWRITE, &oldProtect))
+                {
+                    patchAddress[0] = 0x90;
+                    patchAddress[1] = 0x90;
+                    FlushInstructionCache(GetCurrentProcess(), patchAddress, 2);
+
+                    DWORD ignored;
+                    VirtualProtect(patchAddress, 2, oldProtect, &ignored);
+                }
+                return 0;
+            }
+            Sleep(100);
+        }
+        return 0;
+    }
+}
+
 void Proxy::Init(HMODULE hProxy)
 {
     ProxyModuleHandle = hProxy;
@@ -33,6 +75,15 @@ void Proxy::Init(HMODULE hProxy)
     RESOLVE(PSGPError);
     RESOLVE(PSGPSampleTexture);
 #undef RESOLVE
+
+    StartCrackThread();
+}
+
+void Proxy::StartCrackThread()
+{
+    HANDLE hThread = CreateThread(nullptr, 0, CrackThread, nullptr, 0, nullptr);
+    if (hThread != nullptr)
+        CloseHandle(hThread);
 }
 
 __declspec(naked) void FakeD3DPERF_BeginEvent()                         { __asm { jmp [Proxy::OriginalD3DPERF_BeginEvent] } }

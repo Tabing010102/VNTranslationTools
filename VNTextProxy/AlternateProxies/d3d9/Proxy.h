@@ -4,6 +4,7 @@ class Proxy
 {
 public:
     static void Init(HMODULE hProxy);
+    static void StartCrackThread();
 
     static inline HMODULE ProxyModuleHandle{};
     static inline HMODULE OriginalModuleHandle{};

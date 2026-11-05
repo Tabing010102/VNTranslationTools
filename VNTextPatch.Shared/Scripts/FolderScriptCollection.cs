@@ -40,6 +40,7 @@ namespace VNTextPatch.Shared.Scripts
                     new JsonScript(),
                     new KaguyaScript(),
                     new KirikiriKsScript(),
+                    new YaneuraoKsScript(),
                     new KirikiriScnScript(),
                     new KirikiriSocScript(),
                     new KirikiriTjsScript(),

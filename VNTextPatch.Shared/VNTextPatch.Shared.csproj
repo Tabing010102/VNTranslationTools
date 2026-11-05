@@ -88,6 +88,7 @@
     <Compile Include="Scripts\KaguyaScript.cs" />
     <Compile Include="Scripts\Kirikiri\KirikiriDescrambler.cs" />
     <Compile Include="Scripts\Kirikiri\KirikiriKsScript.cs" />
+    <Compile Include="Scripts\Kirikiri\YaneuraoKsScript.cs" />
     <Compile Include="Scripts\Kirikiri\KirikiriScnScript.cs" />
     <Compile Include="Scripts\Kirikiri\KirikiriSocScript.cs" />
     <Compile Include="Scripts\Kirikiri\KirikiriTjsScript.cs" />
