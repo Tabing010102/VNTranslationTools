@@ -18,8 +18,6 @@ namespace
 
     volatile LONG PreloadCallCount = 0;
     volatile LONG DrawCallCount = 0;
-    volatile LONG PreloadWideCallCount = 0;
-    volatile LONG DrawWideCallCount = 0;
 
     size_t GetRawTextLength(LPCSTR text, INT count)
     {
@@ -76,39 +74,6 @@ namespace
             raw.c_str(),
             decoded.size(),
             wide.c_str()
-        );
-    }
-
-    void LogWideTextCall(const char* method, volatile LONG* counter, LPCWSTR text, INT count)
-    {
-        LONG callNumber = InterlockedIncrement(counter);
-        if (callNumber > 200)
-            return;
-
-        size_t length = 0;
-        if (text != nullptr)
-            length = count < 0 ? wcsnlen_s(text, 2048) : static_cast<size_t>(count);
-        std::wstring value = text == nullptr ? std::wstring() : std::wstring(text, (std::min)(length, static_cast<size_t>(2048)));
-        std::string utf8 = TraceLog::ToUtf8(value.substr(0, 1024));
-
-        std::string codePoints;
-        for (size_t i = 0; i < value.size() && i < 256; i++)
-        {
-            char point[16]{};
-            sprintf_s(point, "%04X", static_cast<unsigned int>(value[i]));
-            if (!codePoints.empty())
-                codePoints += ' ';
-            codePoints += point;
-        }
-
-        TraceLog::Write(
-            "%s #%ld count=%d wide_len=%zu utf8=[%s] codepoints=[%s]",
-            method,
-            callNumber,
-            count,
-            value.size(),
-            utf8.c_str(),
-            codePoints.c_str()
         );
     }
 }
@@ -216,7 +181,8 @@ HRESULT __stdcall D3DXProportionalizer::CreateFontIndirectWHook(void* device, co
 void D3DXProportionalizer::PatchFont(void* font)
 {
     // ID3DXFont's vtable is IUnknown (3 entries), followed by 15 font
-    // methods.  PreloadTextA/W and DrawTextA/W are entries 12 through 15.
+    // methods.  PreloadTextA and DrawTextA are entries 12 and 14; their W
+    // counterparts are the next entries and remain unmodified.
     void** vtable = *reinterpret_cast<void***>(font);
     if (vtable == nullptr)
     {
@@ -248,17 +214,13 @@ void D3DXProportionalizer::PatchFont(void* font)
         );
     }
 
-    MemoryUnprotector unprotect(&vtable[12], sizeof(void*) * 4);
+    MemoryUnprotector unprotect(&vtable[12], sizeof(void*) * 3);
     vtable[12] = reinterpret_cast<void*>(PreloadTextAHook);
-    vtable[13] = reinterpret_cast<void*>(PreloadTextWHook);
     vtable[14] = reinterpret_cast<void*>(DrawTextAHook);
-    vtable[15] = reinterpret_cast<void*>(DrawTextWHook);
     TraceLog::Write(
-        "D3DX PatchFont installed vtable[12]=%p vtable[13]=%p vtable[14]=%p vtable[15]=%p",
+        "D3DX PatchFont installed vtable[12]=%p vtable[14]=%p",
         vtable[12],
-        vtable[13],
-        vtable[14],
-        vtable[15]
+        vtable[14]
     );
 }
 
@@ -279,17 +241,6 @@ HRESULT __stdcall D3DXProportionalizer::PreloadTextAHook(void* font, LPCSTR text
     return OriginalPreloadTextW(font, wideText.c_str(), GetWideCount(wideText, count));
 }
 
-HRESULT __stdcall D3DXProportionalizer::PreloadTextWHook(void* font, LPCWSTR text, INT count)
-{
-    LogWideTextCall("PreloadTextW", &PreloadWideCallCount, text, count);
-    if (OriginalPreloadTextW == nullptr)
-    {
-        TraceLog::Write("PreloadTextW failed: original W function is null");
-        return E_FAIL;
-    }
-    return OriginalPreloadTextW(font, text, count);
-}
-
 INT __stdcall D3DXProportionalizer::DrawTextAHook(void* font, void* sprite, LPCSTR text, INT count, RECT* rect, DWORD format, DWORD color)
 {
     std::wstring wideText = SjisTunnelEncoding::Decode(text, count);
@@ -300,15 +251,4 @@ INT __stdcall D3DXProportionalizer::DrawTextAHook(void* font, void* sprite, LPCS
         return 0;
     }
     return OriginalDrawTextW(font, sprite, wideText.c_str(), GetWideCount(wideText, count), rect, format, color);
-}
-
-INT __stdcall D3DXProportionalizer::DrawTextWHook(void* font, void* sprite, LPCWSTR text, INT count, RECT* rect, DWORD format, DWORD color)
-{
-    LogWideTextCall("DrawTextW", &DrawWideCallCount, text, count);
-    if (OriginalDrawTextW == nullptr)
-    {
-        TraceLog::Write("DrawTextW failed: original W function is null");
-        return 0;
-    }
-    return OriginalDrawTextW(font, sprite, text, count, rect, format, color);
 }

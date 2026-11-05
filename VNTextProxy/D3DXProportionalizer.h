@@ -17,9 +17,7 @@ private:
 
     static HRESULT __stdcall CreateFontIndirectWHook(void* device, const void* description, void** font);
     static HRESULT __stdcall PreloadTextAHook(void* font, LPCSTR text, INT count);
-    static HRESULT __stdcall PreloadTextWHook(void* font, LPCWSTR text, INT count);
     static INT __stdcall DrawTextAHook(void* font, void* sprite, LPCSTR text, INT count, RECT* rect, DWORD format, DWORD color);
-    static INT __stdcall DrawTextWHook(void* font, void* sprite, LPCWSTR text, INT count, RECT* rect, DWORD format, DWORD color);
 
     static void PatchFont(void* font);
     static INT GetWideCount(const std::wstring& text, INT originalCount);
