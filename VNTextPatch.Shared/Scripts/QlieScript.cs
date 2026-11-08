@@ -46,7 +46,9 @@ namespace VNTextPatch.Shared.Scripts
                 if (line.Length == 0)
                     continue;
 
-                if (line.StartsWith("^select,"))
+                // Also matches numbered choices such as "^select1,A,B": the number is part of the command name and
+                // is kept, only the comma-separated choices are text.
+                if (Regex.IsMatch(line, @"^\^select\d*,"))
                 {
                     foreach (Range argRange in GetCommandArgumentRanges(lineStartPos, line))
                     {
