@@ -4,6 +4,21 @@ namespace
 {
     constexpr DWORD CrackPatchOffset = 0x12C597;
 
+    // The patch site is read and written through Read/WriteProcessMemory so
+    // that a page the Enigma unpacker is still changing makes the call fail
+    // instead of raising an access violation in this thread.
+    bool ReadCode(const BYTE* address, BYTE (&bytes)[2])
+    {
+        SIZE_T done = 0;
+        return ReadProcessMemory(GetCurrentProcess(), address, bytes, sizeof(bytes), &done) && done == sizeof(bytes);
+    }
+
+    std::string CodeHex(const BYTE* address)
+    {
+        BYTE bytes[2];
+        return ReadCode(address, bytes) ? TraceLog::Hex(bytes, sizeof(bytes)) : "<unreadable>";
+    }
+
     DWORD WINAPI CrackThread(LPVOID)
     {
         HMODULE hGame = GetModuleHandleW(nullptr);
@@ -31,7 +46,7 @@ namespace
             hGame,
             imageSize,
             patchAddress,
-            TraceLog::Hex(patchAddress, 2).c_str()
+            CodeHex(patchAddress).c_str()
         );
 
         // The original 9177 proxy waited for the unpacked instruction
@@ -54,7 +69,8 @@ namespace
             if (patchedAt != 0 ? now - patchedAt >= WatchAfterPatchMs : now - start >= TimeoutMs)
                 break;
 
-            if (patchAddress[0] == 0xFF && patchAddress[1] == 0xD0)
+            BYTE current[2];
+            if (ReadCode(patchAddress, current) && current[0] == 0xFF && current[1] == 0xD0)
             {
                 DWORD oldProtect;
                 if (!VirtualProtect(patchAddress, 2, PAGE_EXECUTE_READWRITE, &oldProtect))
@@ -62,12 +78,20 @@ namespace
                     TraceLog::Write("crack thread: VirtualProtect failed at %p error=%lu", patchAddress, GetLastError());
                     return 0;
                 }
-                patchAddress[0] = 0x90;
-                patchAddress[1] = 0x90;
+                static const BYTE nops[2] = { 0x90, 0x90 };
+                SIZE_T written = 0;
+                BOOL ok = WriteProcessMemory(GetCurrentProcess(), patchAddress, nops, sizeof(nops), &written) &&
+                          written == sizeof(nops);
+                DWORD writeError = GetLastError();
                 FlushInstructionCache(GetCurrentProcess(), patchAddress, 2);
 
                 DWORD ignored;
                 VirtualProtect(patchAddress, 2, oldProtect, &ignored);
+                if (!ok)
+                {
+                    TraceLog::Write("crack thread: write failed at %p error=%lu; retrying", patchAddress, writeError);
+                    continue;
+                }
                 patches++;
                 if (patchedAt == 0)
                     patchedAt = now;
@@ -77,7 +101,7 @@ namespace
                     now - start,
                     patches,
                     oldProtect,
-                    TraceLog::Hex(patchAddress, 2).c_str()
+                    CodeHex(patchAddress).c_str()
                 );
             }
 
@@ -94,12 +118,12 @@ namespace
             TraceLog::Write(
                 "crack thread: timed out; patch=%p final=%s",
                 patchAddress,
-                TraceLog::Hex(patchAddress, 2).c_str()
+                CodeHex(patchAddress).c_str()
             );
         }
         else
         {
-            TraceLog::Write("crack thread: done; patches=%d final=%s", patches, TraceLog::Hex(patchAddress, 2).c_str());
+            TraceLog::Write("crack thread: done; patches=%d final=%s", patches, CodeHex(patchAddress).c_str());
         }
         return 0;
     }
