@@ -1,8 +1,19 @@
 #pragma once
 
+// Relaunches the game through Locale Emulator's core DLLs (LoaderDll.dll and
+// LocaleEmulator.dll from Locale Emulator 2.5.0.1) using the same settings as
+// LE's "Run in Japanese" profile. Both DLLs must be next to the game EXE:
+// LeCreateProcess builds the LocaleEmulator.dll path from the main module.
 class LocaleEmulator
 {
 public:
+	// True if this process was started by Relaunch(). Clears the marker so
+	// processes started by the game itself are not affected.
+	static bool ConsumeRelaunchMarker();
+
+	// Starts a new instance of the game under Locale Emulator. Returns false
+	// (and leaves the current process untouched) if the DLLs are missing or
+	// the new process could not be created.
 	static bool Relaunch();
 
 private:
@@ -44,19 +55,14 @@ private:
 		_SYSTEMTIME DaylightDate;
 	} REG_TZI_FORMAT;
 
+	// Registry redirection entries use 64-bit fields in both 32- and 64-bit
+	// builds. Buffer and Data hold byte offsets from the start of the LEB.
 	typedef struct
 	{
-		USHORT Length;
-		USHORT MaximumLength;
-		union
-		{
-			PWSTR  Buffer;
-			ULONG64 Dummy;
-		};
-	} UNICODE_STRING3264, *PUNICODE_STRING3264;
-
-	typedef UNICODE_STRING3264 UNICODE_STRING64;
-	typedef PUNICODE_STRING3264 PUNICODE_STRING64;
+		USHORT  Length;
+		USHORT  MaximumLength;
+		ULONG64 Buffer;
+	} UNICODE_STRING64;
 
 	typedef struct
 	{
@@ -64,7 +70,7 @@ private:
 		UNICODE_STRING64    SubKey;
 		UNICODE_STRING64    ValueName;
 		ULONG               DataType;
-		PVOID64             Data;
+		ULONG64             Data;
 		ULONG64             DataSize;
 	} REGISTRY_ENTRY64;
 
@@ -72,8 +78,10 @@ private:
 	{
 		REGISTRY_ENTRY64 Original;
 		REGISTRY_ENTRY64 Redirected;
-	} REGISTRY_REDIRECTION_ENTRY64, *PREGISTRY_REDIRECTION_ENTRY64;
+	} REGISTRY_REDIRECTION_ENTRY64;
 
+	// Followed in memory by NumberOfRegistryRedirectionEntries entries and the
+	// string data they point to.
 	typedef struct
 	{
 		ULONG                           AnsiCodePage;
@@ -84,13 +92,19 @@ private:
 		WCHAR                           DefaultFaceName[LF_FACESIZE];
 		RTL_TIME_ZONE_INFORMATION       Timezone;
 		ULONG64                         NumberOfRegistryRedirectionEntries;
-		REGISTRY_REDIRECTION_ENTRY64    RegistryReplacement[1];
-	} LOCALE_ENUMLATOR_ENVIRONMENT_BLOCK, * PLOCALE_ENUMLATOR_ENVIRONMENT_BLOCK, LEB, *PLEB;
+	} LOCALE_ENUMLATOR_ENVIRONMENT_BLOCK, *PLOCALE_ENUMLATOR_ENVIRONMENT_BLOCK, LEB, *PLEB;
 
-	typedef DWORD (WINAPI* LeCreateProcess_t)(
+	// Offsets used by LoaderDll.dll 2.5.0.1 (entry count at +0x100, entries
+	// of 0x80 bytes starting at +0x108).
+	static_assert(sizeof(REGISTRY_ENTRY64) == 0x40);
+	static_assert(sizeof(REGISTRY_REDIRECTION_ENTRY64) == 0x80);
+	static_assert(offsetof(LEB, NumberOfRegistryRedirectionEntries) == 0x100);
+	static_assert(sizeof(LEB) == 0x108);
+
+	typedef LONG (WINAPI* LeCreateProcess_t)(
 		PLEB                    leb,
 		PCWSTR                  applicationName,
-		PCWSTR                  commandLine,
+		PWSTR                   commandLine,
 		PCWSTR                  currentDirectory,
 		ULONG                   creationFlags,
 		LPSTARTUPINFOW          startupInfo,
@@ -101,5 +115,5 @@ private:
 		HANDLE                  token
 	);
 
-	static LEB CreateLeb();
+	static std::vector<BYTE> CreateLeb();
 };

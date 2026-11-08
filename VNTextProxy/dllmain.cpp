@@ -50,15 +50,25 @@ void Initialize()
         GetModuleHandleW(L"LEProc.exe")
     );
 
-    // Uncomment for games that only work in a Japanese locale
-    // (and include LoaderDll.dll and LocaleEmulator.dll from https://github.com/xupefei/Locale-Emulator/releases)
-    /*
+    // On non-Japanese systems, relaunch through Locale Emulator if its
+    // LoaderDll.dll and LocaleEmulator.dll are next to the game. Without them,
+    // or when already started by LE, the game continues as before.
+    bool relaunched = LocaleEmulator::ConsumeRelaunchMarker();
+    TraceLog::Write("locale emulator: relaunch_marker=%d", relaunched ? 1 : 0);
     if (GetACP() != 932)
     {
-        if (LocaleEmulator::Relaunch())
+        if (relaunched)
+        {
+            TraceLog::Write("locale emulator: relaunched process still has ACP=%u; continuing", GetACP());
+        }
+        else if (LocaleEmulator::Relaunch())
+        {
+            // The game's own code has not started yet. Terminate instead of
+            // ExitProcess so no DLL detach or exit code runs in this process.
+            TerminateProcess(GetCurrentProcess(), 0);
             ExitProcess(0);
+        }
     }
-    //*/
 
     CompilerHelper::Init();
     TraceLog::Write("CompilerHelper initialized");
