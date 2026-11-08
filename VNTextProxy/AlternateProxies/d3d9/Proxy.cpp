@@ -38,37 +38,69 @@ namespace
         // "call eax" (FF D0) at this fixed RVA, then replaced it with two
         // NOPs.  Keep the same patch but do it without the original DLL's
         // message box and without modifying the packed entry point.
-        for (int i = 0; i < 600; i++)
+        //
+        // Polling every 100 ms intermittently missed the call (the game then
+        // shows its authentication error), so spin until the bytes appear. After
+        // patching, keep watching briefly in case the unpacker rewrites them.
+        constexpr ULONGLONG SpinMs = 5000;
+        constexpr ULONGLONG TimeoutMs = 60000;
+        constexpr ULONGLONG WatchAfterPatchMs = 3000;
+        ULONGLONG start = GetTickCount64();
+        ULONGLONG patchedAt = 0;
+        int patches = 0;
+        for (;;)
         {
+            ULONGLONG now = GetTickCount64();
+            if (patchedAt != 0 ? now - patchedAt >= WatchAfterPatchMs : now - start >= TimeoutMs)
+                break;
+
             if (patchAddress[0] == 0xFF && patchAddress[1] == 0xD0)
             {
                 DWORD oldProtect;
-                if (VirtualProtect(patchAddress, 2, PAGE_EXECUTE_READWRITE, &oldProtect))
+                if (!VirtualProtect(patchAddress, 2, PAGE_EXECUTE_READWRITE, &oldProtect))
                 {
-                    patchAddress[0] = 0x90;
-                    patchAddress[1] = 0x90;
-                    FlushInstructionCache(GetCurrentProcess(), patchAddress, 2);
-
-                    DWORD ignored;
-                    VirtualProtect(patchAddress, 2, oldProtect, &ignored);
-                    TraceLog::Write(
-                        "crack thread: patched %p FF D0 -> 90 90; old_protect=0x%lX new=%s",
-                        patchAddress,
-                        oldProtect,
-                        TraceLog::Hex(patchAddress, 2).c_str()
-                    );
-                }
-                else
                     TraceLog::Write("crack thread: VirtualProtect failed at %p error=%lu", patchAddress, GetLastError());
-                return 0;
+                    return 0;
+                }
+                patchAddress[0] = 0x90;
+                patchAddress[1] = 0x90;
+                FlushInstructionCache(GetCurrentProcess(), patchAddress, 2);
+
+                DWORD ignored;
+                VirtualProtect(patchAddress, 2, oldProtect, &ignored);
+                patches++;
+                if (patchedAt == 0)
+                    patchedAt = now;
+                TraceLog::Write(
+                    "crack thread: patched %p FF D0 -> 90 90 after %llu ms (patch #%d); old_protect=0x%lX new=%s",
+                    patchAddress,
+                    now - start,
+                    patches,
+                    oldProtect,
+                    TraceLog::Hex(patchAddress, 2).c_str()
+                );
             }
-            Sleep(100);
+
+            if (patchedAt != 0)
+                Sleep(1);
+            else if (now - start < SpinMs)
+                SwitchToThread();
+            else
+                Sleep(10);
         }
-        TraceLog::Write(
-            "crack thread: timed out; patch=%p final=%s",
-            patchAddress,
-            TraceLog::Hex(patchAddress, 2).c_str()
-        );
+
+        if (patches == 0)
+        {
+            TraceLog::Write(
+                "crack thread: timed out; patch=%p final=%s",
+                patchAddress,
+                TraceLog::Hex(patchAddress, 2).c_str()
+            );
+        }
+        else
+        {
+            TraceLog::Write("crack thread: done; patches=%d final=%s", patches, TraceLog::Hex(patchAddress, 2).c_str());
+        }
         return 0;
     }
 }
