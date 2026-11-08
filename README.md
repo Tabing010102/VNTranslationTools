@@ -24,6 +24,7 @@ A tool for extracting original text from, and patching translated text into, a v
 | SystemNNN                            | .nnn/.spt      |                                                                                |
 | TmrHiroAdvSystem                     | .srp/(none)    | Append `--format=tmrhiroadvsystemtext` to command line in case of no extension |
 | Whale                                | .txt           | Append `--format=whale` to command line                                        |
+| Yaneurao                             | .ks            | Use `--format=YaneuraoKs`; optional `--fontmap=...` selects font borrowing       |
 | YU-RIS                               | .ybn           |                                                                                |
 
 The tool can extract text into Excel workbooks (.xlsx) or JSON files (.json), and reinsert text from Excel, JSON, or Google Docs Spreadsheets. Working with .xlsx files does not require Microsoft Excel to be installed.
@@ -68,7 +69,66 @@ This approach makes it possible to have a large number of otherwise unsupported 
 
 By default, sjis_ext.bin is created inside the output folder, next to the patched game files. You can pass a fourth argument to `insertlocal` and `insertgdocs` to specify an alternative path (which should include the file name). The proxy DLL expects the file to be in the same folder as the game .exe.
 
+## Yaneurao: build-time CP932 font borrowing
+
+For an engine that accepts ordinary CP932 but cannot decode SJIS tunnel bytes,
+use `--format=YaneuraoKs --fontmap=cp932_font_replace.tsv` with `extractlocal`,
+`insertlocal`, or `insertgdocs`. This opt-in mode does not read or generate
+`sjis_ext.bin`. The existing tunnel mode and other engine formats are unchanged.
+
+```text
+VNTextPatch insertlocal original_scripts translation_json patched_scripts --format=YaneuraoKs --fontmap=cp932_font_replace.tsv
+```
+
+The UTF-8 TSV requires `cp932_hex`, `original_char`, and `replacement_char`
+columns. Each row maps an unsupported translated character to an unused,
+round-trippable two-byte CP932 carrier. Native CP932 characters are preserved.
+The corresponding custom font must show the translated glyph at the carrier's
+**Unicode cmap position**, not at the numeric value of its CP932 bytes.
+Carrier characters must be absent from every original/translated script and
+other text that should retain its original appearance. Reserved carriers or
+unsupported characters encountered during encoding cause an error instead of
+silently becoming question marks or generating tunnel mappings.
+
+The map is a **build-time** input, not a runtime file. Distribute the rewritten
+scripts/archives and their matching font together. Neither a successful build
+nor a valid mapping proves that a game selects the custom font: verify the
+actual font and rendered text in-game. Future text updates must also be checked
+for carrier conflicts before reusing the mapping.
+
+Use a separate output directory for each scheme. Do not combine a tunnel-built
+script with a borrowing font, or a borrowed script with an unmodified font.
+The borrowing mode does not delete an existing `sjis_ext.bin`; it ignores it.
+It also rejects the optional positional tunnel-map path argument when
+`--fontmap` is selected. Without `--fontmap`, Yaneurao retains its existing
+CP932/SJIS-tunnel writer; the ordinary Kirikiri writer is still UTF-16LE.
+
+For example, CP932 bytes `98A1` decode to carrier U+4E15 (丕). A map that borrows
+this carrier for U+8FD9 (这) requires the font to render the Chinese glyph at
+U+4E15, not U+98A1. Read glyph sources from an unmodified cmap snapshot and do
+not overwrite shared glyph outlines used by characters that must be preserved.
+Keep all applicable Unicode cmap subtables consistent, preserve font metrics,
+and match the font file basename to its internal family name when using the
+current proxy font loader. Validate actual carrier strings, not only the
+translated Unicode text. Building a font is a separate step from encoding;
+this option neither creates a font nor proves that a game selects it.
+
+On the `yaneurao_v21455` branch, the proxy additionally recognizes the preferred
+external `MahoroCHS Gothic.ttf` file. After successful private loading it forces
+the matching family for native GDI `CreateFontIndirectW` and D3DX font creation,
+while preserving requested size/style properties. This native export detour
+also covers cached pointers that bypass the packed executable's on-disk IAT.
+Diagnostics compare selected font data with the external file and report
+`custom_font_match`; a matching localized family name alone is not proof.
+This opt-in font override does not change authentication bypass or enable a
+global loader/GetProcAddress hook, and still needs in-game verification.
+
+The standalone regression harness in `tests/Cp932FontEncodingTests.cs` can be
+compiled together with `VNTextPatch.Shared/Util/Cp932FontEncoding.cs` and run
+with an optional TSV path to validate every real mapping row.
+
 # VNTextProxy
+
 A proxy d2d1.dll that hooks into the game and helps with making it display non-Japanese text. It can do the following:
 * Render non-SJIS characters in SJIS-only games (see previous section).
 * Load a custom font (.ttf/.ttc/.otf) from the game's folder and force the game to use it. The font file name should match the font name.

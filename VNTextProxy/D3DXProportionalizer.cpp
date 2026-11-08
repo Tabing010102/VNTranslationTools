@@ -209,14 +209,36 @@ HRESULT __stdcall D3DXProportionalizer::CreateFontIndirectWHook(void* device, co
         );
     }
 
-    HRESULT result = OriginalCreateFontIndirectW(device, description, font);
+    D3DXFontDescW forced{};
+    const void* effectiveDescription = description;
+    if (description != nullptr && Proportionalizer::ForceCustomFont)
+    {
+        forced = *static_cast<const D3DXFontDescW*>(description);
+        wcscpy_s(forced.FaceName, Proportionalizer::CustomFontName.c_str());
+        forced.CharSet = DEFAULT_CHARSET;
+        effectiveDescription = &forced;
+        TraceLog::Write("FONT force D3DXCreateFontIndirectW forced=%s height=%d width=%u weight=%u charset=%u",
+            TraceLog::ToUtf8(forced.FaceName).c_str(), forced.Height, forced.Width, forced.Weight, forced.CharSet);
+    }
+
+    HRESULT result = OriginalCreateFontIndirectW(device, effectiveDescription, font);
     TraceLog::Write(
         "D3DXCreateFontIndirectW leave hr=0x%08lX out_value=%p",
         static_cast<unsigned long>(result),
         font == nullptr ? nullptr : *font
     );
     if (SUCCEEDED(result) && font != nullptr && *font != nullptr)
+    {
+        if (Proportionalizer::ForceCustomFont)
+        {
+            void** vtable = *reinterpret_cast<void***>(*font);
+            GetDCFunction getDC = OriginalGetDC != nullptr ? OriginalGetDC : reinterpret_cast<GetDCFunction>(vtable[8]);
+            HDC dc = getDC(*font);
+            Proportionalizer::TraceCustomFontSelection("D3DX create verification (not a game draw call)",
+                dc == nullptr ? nullptr : static_cast<HFONT>(GetCurrentObject(dc, OBJ_FONT)));
+        }
         PatchFont(*font);
+    }
 
     return result;
 }

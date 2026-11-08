@@ -1,8 +1,8 @@
 #pragma once
 
-// Yaneurao renders its text through ID3DXFont rather than GDI.  The engine
-// calls ID3DXFont::DrawTextA/PreloadTextA with the bytes from the .ks file,
-// so the normal GDI hooks cannot decode SJIS tunnel characters on this path.
+// Cover D3DX font creation and retain diagnostic text/glyph probes. Creating an
+// ID3DXFont does not prove that the game's body text uses its drawing methods;
+// Yaneurao also has a separate GDI glyph-cache path.
 class D3DXProportionalizer
 {
 public:

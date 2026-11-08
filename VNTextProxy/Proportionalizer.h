@@ -5,10 +5,13 @@ class Proportionalizer
 public:
     static void Init();
     static int MeasureStringWidth(const std::wstring& str, int fontSize);
+    static bool ApplyCustomFont(LOGFONTW& info);
+    static void TraceCustomFontSelection(const char* source, HFONT font);
     
     static inline std::wstring CustomFontName{};
     static inline std::wstring CustomFontFilePath{};
     static inline std::wstring LastFontName{};
+    static inline bool ForceCustomFont{};
     static inline int LastLineEnd;
 
 protected:

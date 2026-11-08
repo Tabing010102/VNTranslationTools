@@ -1,4 +1,5 @@
 #include "pch.h"
+#include <intrin.h>
 
 using namespace std;
 
@@ -6,11 +7,22 @@ namespace
 {
     volatile LONG GdiCreateFontCallCount = 0;
     volatile LONG GdiTextOutCallCount = 0;
+    volatile LONG NativeFontCallCount = 0;
+    thread_local bool InsideNativeFontHook = false;
+
+    struct NativeFontHookScope
+    {
+        NativeFontHookScope() { InsideNativeFontHook = true; }
+        ~NativeFontHookScope() { InsideNativeFontHook = false; }
+    };
 }
 
 void GdiProportionalizer::Init()
 {
     Proportionalizer::Init();
+    // Packed Yaneurao resolves the real GDI entry separately from its on-disk
+    // IAT. Hook just font creation, not GetProcAddress or the loader APIs.
+    InstallNativeFontHook();
     ImportHooker::Hook(
         {
             { "EnumFontsA", EnumFontsAHook },
@@ -27,6 +39,60 @@ void GdiProportionalizer::Init()
             { "GetGlyphOutlineA", GetGlyphOutlineAHook }
         }
     );
+}
+
+void GdiProportionalizer::InstallNativeFontHook()
+{
+    if (!ForceCustomFont)
+        return;
+    HMODULE gdi = GetModuleHandleW(L"gdi32.dll");
+    OriginalNativeCreateFontIndirectW = gdi == nullptr ? nullptr :
+        reinterpret_cast<NativeCreateFontIndirectWFunction>(GetProcAddress(gdi, "CreateFontIndirectW"));
+    if (OriginalNativeCreateFontIndirectW == nullptr)
+    {
+        TraceLog::Write("FONT native CreateFontIndirectW export unavailable");
+        return;
+    }
+
+    LONG error = DetourTransactionBegin();
+    if (error == NO_ERROR)
+    {
+        error = DetourUpdateThread(GetCurrentThread());
+        if (error == NO_ERROR)
+            error = DetourAttach(reinterpret_cast<PVOID*>(&OriginalNativeCreateFontIndirectW),
+                reinterpret_cast<PVOID>(NativeCreateFontIndirectWHook));
+        if (error == NO_ERROR)
+            error = DetourTransactionCommit();
+        else
+            DetourTransactionAbort();
+    }
+    TraceLog::Write("FONT native CreateFontIndirectW detour result=%ld trampoline=%p", error, OriginalNativeCreateFontIndirectW);
+}
+
+HFONT WINAPI GdiProportionalizer::NativeCreateFontIndirectWHook(const LOGFONTW* info)
+{
+    if (info == nullptr || !ForceCustomFont || InsideNativeFontHook)
+        return OriginalNativeCreateFontIndirectW(info);
+
+    NativeFontHookScope guard;
+    LOGFONTW forced = *info;
+    ApplyCustomFont(forced);
+    LONG number = InterlockedIncrement(&NativeFontCallCount);
+    if (number <= 64)
+    {
+        wstring originalFace(info->lfFaceName, wcsnlen_s(info->lfFaceName, LF_FACESIZE));
+        TraceLog::Write("FONT force GDI CreateFontIndirectW #%ld caller=%p original=%s forced=%s height=%ld width=%ld weight=%ld charset=%u->%u pitch=%u",
+            number, _ReturnAddress(), TraceLog::ToUtf8(originalFace).c_str(),
+            TraceLog::ToUtf8(forced.lfFaceName).c_str(), forced.lfHeight, forced.lfWidth,
+            forced.lfWeight, info->lfCharSet, forced.lfCharSet, forced.lfPitchAndFamily);
+    }
+    // Do not route this callback through FontManager: Font constructs its HFONT
+    // with CreateFontIndirectW, which would otherwise recurse into this hook.
+    HFONT font = OriginalNativeCreateFontIndirectW(&forced);
+    DWORD error = GetLastError();
+    TraceCustomFontSelection("GDI native create", font);
+    SetLastError(error);
+    return font;
 }
 
 int GdiProportionalizer::EnumFontsAHook(HDC hdc, LPCSTR lpLogfont, FONTENUMPROCA lpProc, LPARAM lParam)
@@ -139,6 +205,15 @@ HFONT GdiProportionalizer::CreateFontWHook(int cHeight, int cWidth, int cEscapem
 
 HFONT GdiProportionalizer::CreateFontIndirectWHook(LOGFONTW* pFontInfo)
 {
+    if (ForceCustomFont)
+    {
+        LOGFONTW forced = *pFontInfo;
+        ApplyCustomFont(forced);
+        LastFontName = CustomFontName;
+        // Preserve the engine's width, weight, quality and style parameters.
+        return FontManager.FetchFont(forced)->GetGdiHandle();
+    }
+
     if (CustomFontName.empty())
     {
         LastFontName = pFontInfo->lfFaceName;

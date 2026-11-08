@@ -6,6 +6,11 @@ public:
     static void Init();
 
 private:
+    using NativeCreateFontIndirectWFunction = HFONT (WINAPI *)(const LOGFONTW* info);
+    static inline NativeCreateFontIndirectWFunction OriginalNativeCreateFontIndirectW{};
+    static void InstallNativeFontHook();
+    static HFONT WINAPI NativeCreateFontIndirectWHook(const LOGFONTW* info);
+
     static int __stdcall EnumFontsAHook(HDC hdc, LPCSTR lpLogfont, FONTENUMPROCA lpProc, LPARAM lParam);
     static int __stdcall EnumFontFamiliesExAHook(HDC hdc, LPLOGFONTA lpLogfont, FONTENUMPROCA lpProc, LPARAM lParam, DWORD dwFlags);
     static int __stdcall EnumFontsProc(const LOGFONTW* lplf, const TEXTMETRICW* lptm, DWORD dwType, LPARAM lpData);

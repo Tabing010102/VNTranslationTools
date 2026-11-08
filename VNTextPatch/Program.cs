@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using VNTextPatch.Shared;
 using VNTextPatch.Shared.Scripts;
+using VNTextPatch.Shared.Scripts.Kirikiri;
 using VNTextPatch.Shared.Util;
 
 namespace VNTextPatch
@@ -23,6 +24,14 @@ namespace VNTextPatch
 
             try
             {
+                YaneuraoKsScript.FontEncoding = null;
+                if (options.FontMap != null)
+                {
+                    if (!string.Equals(options.Format, "YaneuraoKs", StringComparison.OrdinalIgnoreCase))
+                        throw new ArgumentException("--fontmap requires --format=YaneuraoKs");
+                    YaneuraoKsScript.FontEncoding = Cp932FontEncoding.FromFile(Path.GetFullPath(options.FontMap));
+                }
+
                 string operation = args[0];
                 switch (operation)
                 {
@@ -47,6 +56,7 @@ namespace VNTextPatch
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
+                Environment.ExitCode = 1;
             }
         }
 
@@ -102,6 +112,9 @@ namespace VNTextPatch
             string textPath = Path.GetFullPath(args[2]);
             string outputPath = Path.GetFullPath(args[3]);
             string sjisExtPath = args.Length > 4 ? Path.GetFullPath(args[4]) : null;
+            bool useFontMap = options.FontMap != null;
+            if (useFontMap && sjisExtPath != null)
+                throw new ArgumentException("--fontmap does not use a sjis_ext.bin argument");
 
             ScriptLocation inputLocation;
             if (!TryParseLocalPath(inputPath, options.Format, out inputLocation))
@@ -109,10 +122,10 @@ namespace VNTextPatch
 
             ScriptLocation textLocation = GetLocalTextScriptLocation(inputLocation, textPath);
 
-            if (sjisExtPath == null)
+            if (!useFontMap && sjisExtPath == null)
                 sjisExtPath = Path.Combine(inputLocation.ScriptName != null ? Path.GetDirectoryName(outputPath) : outputPath, "sjis_ext.bin");
 
-            if (File.Exists(sjisExtPath))
+            if (!useFontMap && File.Exists(sjisExtPath))
                 StringUtil.SjisTunnelEncoding.SetMappingTable(File.ReadAllBytes(sjisExtPath));
 
             try
@@ -133,7 +146,7 @@ namespace VNTextPatch
                 }
 
                 byte[] sjisExtContent = StringUtil.SjisTunnelEncoding.GetMappingTable();
-                if (sjisExtContent.Length > 0)
+                if (!useFontMap && sjisExtContent.Length > 0)
                     File.WriteAllBytes(sjisExtPath, sjisExtContent);
 
                 if (inserter.Statistics != null)
@@ -158,6 +171,9 @@ namespace VNTextPatch
             string spreadsheetId = args[2];
             string outputPath = Path.GetFullPath(args[3]);
             string sjisExtPath = args.Length > 4 ? Path.GetFullPath(args[4]) : null;
+            bool useFontMap = options.FontMap != null;
+            if (useFontMap && sjisExtPath != null)
+                throw new ArgumentException("--fontmap does not use a sjis_ext.bin argument");
 
             ScriptLocation inputLocation;
             if (!TryParseLocalPath(inputPath, options.Format, out inputLocation))
@@ -165,10 +181,10 @@ namespace VNTextPatch
 
             GoogleDocsScriptCollection textCollection = new GoogleDocsScriptCollection(spreadsheetId);
 
-            if (sjisExtPath == null)
+            if (!useFontMap && sjisExtPath == null)
                 sjisExtPath = Path.Combine(inputLocation.ScriptName != null ? Path.GetDirectoryName(outputPath) : outputPath, "sjis_ext.bin");
 
-            if (File.Exists(sjisExtPath))
+            if (!useFontMap && File.Exists(sjisExtPath))
                 StringUtil.SjisTunnelEncoding.SetMappingTable(File.ReadAllBytes(sjisExtPath));
 
             string textScriptName;
@@ -190,7 +206,7 @@ namespace VNTextPatch
             }
 
             byte[] sjisExtContent = StringUtil.SjisTunnelEncoding.GetMappingTable();
-            if (sjisExtContent.Length > 0)
+            if (!useFontMap && sjisExtContent.Length > 0)
                 File.WriteAllBytes(sjisExtPath, sjisExtContent);
 
             if (inserter.Statistics != null)
@@ -274,6 +290,7 @@ namespace VNTextPatch
             Console.WriteLine($"    {assemblyName} extractlocal infile|infolder scriptfile|scriptfolder");
             Console.WriteLine($"    {assemblyName} insertlocal infile|infolder scriptfile|scriptfolder outfile|outfolder");
             Console.WriteLine($"    {assemblyName} insertgdocs infile|infolder spreadsheetId outfile|outfolder");
+            Console.WriteLine("    --format=YaneuraoKs --fontmap=cp932_font_replace.tsv selects font borrowing without sjis_ext.bin");
         }
 
         private class Options
@@ -298,6 +315,10 @@ namespace VNTextPatch
                         case "format":
                             options.Format = value;
                             break;
+
+                        case "fontmap":
+                            options.FontMap = value;
+                            break;
                     }
                 }
 
@@ -310,6 +331,8 @@ namespace VNTextPatch
                 get;
                 private set;
             }
+
+            public string FontMap { get; private set; }
         }
     }
 }

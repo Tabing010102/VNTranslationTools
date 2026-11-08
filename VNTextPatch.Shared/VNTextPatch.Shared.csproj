@@ -151,6 +151,7 @@
     <Compile Include="Util\Adler32.cs" />
     <Compile Include="Util\BinaryUtil.cs" />
     <Compile Include="Util\CollectionExtensions.cs" />
+    <Compile Include="Util\Cp932FontEncoding.cs" />
     <Compile Include="Util\EnumerableExtensions.cs" />
     <Compile Include="Util\EnumeratorList.cs" />
     <Compile Include="Util\GoogleExtensions.cs" />
