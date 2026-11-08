@@ -58,6 +58,8 @@ namespace
 
     void LogTextCall(const char* method, volatile LONG* counter, LPCSTR text, INT count, const std::wstring& decoded)
     {
+        if (!TraceLog::Enabled)
+            return;
         LONG callNumber = InterlockedIncrement(counter);
         bool containsTunnel = ContainsTunnelPair(text, count);
         if (callNumber > 200 && (!containsTunnel || callNumber > 1000))
@@ -82,6 +84,8 @@ namespace
 
     void LogWideTextCall(const char* method, volatile LONG* counter, LPCWSTR text, INT count)
     {
+        if (!TraceLog::Enabled)
+            return;
         LONG callNumber = InterlockedIncrement(counter);
         if (callNumber > 200)
             return;
@@ -115,6 +119,8 @@ namespace
 
     void LogFontMethod(const char* method, const char* detail)
     {
+        if (!TraceLog::Enabled)
+            return;
         LONG callNumber = InterlockedIncrement(&FontMethodCallCount);
         if (callNumber <= 200)
             TraceLog::Write("D3DX %s #%ld %s", method, callNumber, detail);
@@ -229,7 +235,7 @@ HRESULT __stdcall D3DXProportionalizer::CreateFontIndirectWHook(void* device, co
     );
     if (SUCCEEDED(result) && font != nullptr && *font != nullptr)
     {
-        if (Proportionalizer::ForceCustomFont)
+        if (Proportionalizer::ForceCustomFont && TraceLog::Enabled)
         {
             void** vtable = *reinterpret_cast<void***>(*font);
             GetDCFunction getDC = OriginalGetDC != nullptr ? OriginalGetDC : reinterpret_cast<GetDCFunction>(vtable[8]);

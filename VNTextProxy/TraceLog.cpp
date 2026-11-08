@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#if VNTP_ENABLE_TRACE_LOG
 namespace
 {
     constexpr LONG NotInitialized = 0;
@@ -134,6 +135,13 @@ void TraceLog::WriteW(const char* label, const std::wstring& value)
     std::string utf8 = ToUtf8(value);
     Write("%s=%s", label, utf8.c_str());
 }
+#else
+// No file creation, temporary-directory fallback, locks, formatting or writes
+// are present in the default release logger implementation.
+void TraceLog::Initialize() {}
+void TraceLog::Write(const char*, ...) {}
+void TraceLog::WriteW(const char*, const std::wstring&) {}
+#endif
 
 std::string TraceLog::ToUtf8(const std::wstring& value)
 {

@@ -123,6 +123,25 @@ Diagnostics compare selected font data with the external file and report
 This opt-in font override does not change authentication bypass or enable a
 global loader/GetProcAddress hook, and still needs in-game verification.
 
+### Proxy logging builds
+
+Proxy file logging is disabled at compile time by default
+(`VNTextProxyTraceLogging=0`). The normal DLL does not create or append
+`yaneurao_v21455.log`, including the temporary-directory fallback, and skips
+diagnostic-only font-file readback and GDI font verification. Font loading,
+font selection, translation and authentication bypass behavior are unchanged.
+
+To build a diagnostic DLL, pass `/p:VNTextProxyTraceLogging=1` to MSBuild.
+There is no runtime environment variable or configuration file that silently
+re-enables logging in a no-log build. Use a separately named diagnostic artifact
+and rename it to `d3d9.dll` only when intentionally replacing the release DLL.
+
+`tests/TestYaneuraoProxyLogging.ps1` runs the standalone x86 font integration
+test in a fresh sandbox and checks either logging output or both no-log cases:
+no new log file and an existing log left unchanged. Supply the compiled
+`YaneuraoFontOverrideTest` executable, the DLL and its matching font; add
+`-ExpectLogging` only for a diagnostic DLL.
+
 The standalone regression harness in `tests/Cp932FontEncodingTests.cs` can be
 compiled together with `VNTextPatch.Shared/Util/Cp932FontEncoding.cs` and run
 with an optional TSV path to validate every real mapping row.

@@ -78,7 +78,7 @@ HFONT WINAPI GdiProportionalizer::NativeCreateFontIndirectWHook(const LOGFONTW* 
     LOGFONTW forced = *info;
     ApplyCustomFont(forced);
     LONG number = InterlockedIncrement(&NativeFontCallCount);
-    if (number <= 64)
+    if (TraceLog::Enabled && number <= 64)
     {
         wstring originalFace(info->lfFaceName, wcsnlen_s(info->lfFaceName, LF_FACESIZE));
         TraceLog::Write("FONT force GDI CreateFontIndirectW #%ld caller=%p original=%s forced=%s height=%ld width=%ld weight=%ld charset=%u->%u pitch=%u",

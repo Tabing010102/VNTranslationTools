@@ -56,6 +56,8 @@ bool Proportionalizer::ApplyCustomFont(LOGFONTW& info)
 
 void Proportionalizer::TraceCustomFontSelection(const char* source, HFONT font)
 {
+    if (!TraceLog::Enabled)
+        return;
     LONG number = InterlockedIncrement(&FontSelectionTraceCount);
     if (number > 32)
         return;
@@ -193,7 +195,8 @@ wstring Proportionalizer::LoadCustomFont()
     wstring fontFileName = CustomFontFilePath;
     fontFileName.erase(0, fontFileName.rfind(L'\\') + 1);
     fontFileName.erase(fontFileName.find(L'.'), -1);
-    ReadCustomFontData(CustomFontFilePath);
+    if (TraceLog::Enabled)
+        ReadCustomFontData(CustomFontFilePath);
     ForceCustomFont = _wcsicmp(fontFileName.c_str(), L"MahoroCHS Gothic") == 0;
     TraceLog::Write("FONT loaded family=%s force=%s file_bytes=%zu fingerprint=%08lX",
         TraceLog::ToUtf8(fontFileName).c_str(), ForceCustomFont ? "yes" : "no",
